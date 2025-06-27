@@ -6,38 +6,27 @@ color 0A
 cls
 echo.
 echo  ================================================
-echo  🤖 Web Automation Bot Control Panel
+echo  🤖 Web Automation Bot
 echo  ================================================
 echo.
-echo  1. Run Bot
-echo  2. Show Status
-echo  3. Update Configuration
-echo  4. Add Target URL
-echo  5. Add Search Keyword
-echo  6. Test Proxies
-echo  7. View Reports Folder
-echo  8. View Logs
-echo  9. Exit
+echo  1. Run Bot (Visible Mode)
+echo  2. Run Bot (Headless Mode)
+echo  3. Exit
 echo.
-set /p choice="Enter your choice (1-9): "
+set /p choice="Enter your choice (1-3): "
 
-if "%choice%"=="1" goto run_bot
-if "%choice%"=="2" goto show_status
-if "%choice%"=="3" goto update_config
-if "%choice%"=="4" goto add_url
-if "%choice%"=="5" goto add_keyword
-if "%choice%"=="6" goto test_proxies
-if "%choice%"=="7" goto view_reports
-if "%choice%"=="8" goto view_logs
-if "%choice%"=="9" goto exit
+if "%choice%"=="1" goto run_bot_visible
+if "%choice%"=="2" goto run_bot_headless
+if "%choice%"=="3" goto exit
 
 echo Invalid choice. Please try again.
 pause
 goto menu
 
-:run_bot
+:run_bot_visible
 cls
-echo Starting Web Automation Bot...
+echo Starting Web Automation Bot in VISIBLE MODE...
+echo Browser windows will be visible for monitoring
 python bot.py
 if %errorlevel% neq 0 (
     echo.
@@ -46,49 +35,16 @@ if %errorlevel% neq 0 (
 )
 goto menu
 
-:show_status
+:run_bot_headless
 cls
-python manage.py status
-pause
-goto menu
-
-:update_config
-cls
-python manage.py config
-pause
-goto menu
-
-:add_url
-cls
-python manage.py add-url
-pause
-goto menu
-
-:add_keyword
-cls
-python manage.py add-keyword
-pause
-goto menu
-
-:test_proxies
-cls
-python manage.py test-proxies
-pause
-goto menu
-
-:view_reports
-cls
-echo Opening reports folder...
-start "" "reports"
-goto menu
-
-:view_logs
-cls
-echo Current log file contents:
-echo ================================
-type bot.log 2>nul || echo No log file found
-echo ================================
-pause
+echo Starting Web Automation Bot in HEADLESS MODE...
+echo Browser will run in background (not visible)
+python bot.py --headless
+if %errorlevel% neq 0 (
+    echo.
+    echo ❌ Bot stopped with error. Check the logs for details.
+    pause
+)
 goto menu
 
 :exit

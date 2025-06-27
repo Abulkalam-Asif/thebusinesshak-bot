@@ -68,11 +68,12 @@ class SessionResult:
 
 
 class WebAutomationBot:
-  def __init__(self):
+  def __init__(self, debug_mode=True):  # Default to visible mode
+    self.debug_mode = debug_mode  # Add debug mode flag
     # Load configuration
     self.config = self._load_config()
-    self.target_urls = self.config['target_urls']
-    self.search_keywords = self.config['search_keywords']
+    self.target_sites = self.config['target_sites']
+    self.target_urls = list(self.target_sites.keys())  # Keep for backward compatibility
 
     self.proxies = self._load_proxies()
     self.ua = UserAgent()
@@ -116,8 +117,9 @@ class WebAutomationBot:
     self.logger.info(f"Results file: {self.results_file}")
     self.logger.info(f"Summary file: {self.summary_file}")
     self.logger.info(f"Loaded {len(self.proxies)} proxies from proxies.txt")
-    self.logger.info(f"Target URLs: {len(self.target_urls)}")
-    self.logger.info(f"Search keywords: {len(self.search_keywords)}")
+    self.logger.info(f"Target sites: {len(self.target_sites)}")
+    total_keywords = sum(len(keywords) for keywords in self.target_sites.values())
+    self.logger.info(f"Total keywords: {total_keywords}")
 
   def _load_config(self):
     """Load configuration from config.json"""
@@ -137,24 +139,43 @@ class WebAutomationBot:
               "max_clicks_per_session": 4,
               "report_frequency": 50
           },
-          "target_urls": [
-              "https://www.thebusinesshack.com/hire-a-pro-france",
-              "https://www.mindyourbiz.online/find-a-pro_france",
-              "https://www.arcsaver.com/find-a-pro",
-              "https://www.le-trades.com/find-trades",
-              "https://www.batiexperts.com/trouver-des-artisans",
-              "https://www.trouveun.pro/",
-              "https://www.cherche-artisan.com"
-          ],
-          "search_keywords": [
-              "hire professional France",
-              "find trades France",
-              "trouver artisan France",
-              "professional services France",
-              "business hack France",
-              "find expert France",
-              "cherche artisan"
-          ]
+          "target_sites": {
+              "https://www.thebusinesshack.com/hire-a-pro-france": [
+                  "business hack",
+                  "hire professional France",
+                  "business services France"
+              ],
+              "https://www.mindyourbiz.online/find-a-pro_france": [
+                  "mind your biz",
+                  "find professional France",
+                  "business expert France"
+              ],
+              "https://www.arcsaver.com/find-a-pro": [
+                  "arc saver",
+                  "find professional",
+                  "expert services"
+              ],
+              "https://www.le-trades.com/find-trades": [
+                  "le trades",
+                  "find trades",
+                  "trouver métiers"
+              ],
+              "https://www.batiexperts.com/trouver-des-artisans": [
+                  "bati experts",
+                  "expert bâtiment",
+                  "trouver des artisans"
+              ],
+              "https://www.trouveun.pro/": [
+                  "trouve un pro",
+                  "trouver professionnel",
+                  "expert France"
+              ],
+              "https://www.cherche-artisan.com": [
+                  "cherche artisan",
+                  "trouver artisan",
+                  "artisan qualifié"
+              ]
+          }
       }
 
   def _load_proxies(self) -> List[ProxyInfo]:
@@ -470,54 +491,193 @@ class WebAutomationBot:
     return target_url
 
   async def _visit_via_search(self, page: Page) -> Tuple[str, str]:
-    """Visit target URL via Google search"""
-    keyword = random.choice(self.search_keywords)
+    """Visit target URL via Bing search using keyword-URL pairing"""
+    # First select a target URL
+    target_url = random.choice(self.target_urls)
+    
+    # Get a random keyword entry for that specific target URL
+    available_keywords = self.target_sites[target_url]
+    keyword_entry = random.choice(available_keywords)
+    
+    # Parse the keyword entry format: "keyword, domain.com"
+    if ', ' in keyword_entry:
+      keyword, search_domain = keyword_entry.split(', ', 1)
+    else:
+      # Fallback to old format if comma not found
+      keyword = keyword_entry
+      search_domain = target_url.split('/')[2].replace('www.', '')
+    
+    # Clean up the search domain (remove any www. prefix)
+    search_domain = search_domain.replace('www.', '')
+    
+    # Create search query: "keyword domain.com"
+    search_query = f"{keyword} {search_domain}"
 
-    # Go to Google
-    await page.goto("https://www.google.fr", timeout=60000)
+    # Go to Bing instead of DuckDuckGo
+    await page.goto("https://www.bing.com", timeout=60000)
     await asyncio.sleep(random.uniform(1, 3))
 
-    # Accept cookies if present
+    # Accept cookies if present (Bing may show cookie banner)
     try:
-      cookie_button = await page.wait_for_selector('button:has-text("Tout accepter"), button:has-text("Accept all"), #L2AGLb', timeout=5000)
+      cookie_button = await page.wait_for_selector('button:has-text("Accept"), #bnp_btn_accept, .bnp_btn_accept', timeout=5000)
       if cookie_button:
         await cookie_button.click()
         await asyncio.sleep(1)
     except:
       pass
 
-    # Search for keyword
-    search_box = await page.wait_for_selector('input[name="q"], textarea[name="q"]', timeout=10000)
-    await search_box.type(keyword, delay=random.randint(50, 150))
+    # Bing search box
+    search_box = await page.wait_for_selector('input[name="q"], #sb_form_q', timeout=10000)
+    await search_box.type(search_query, delay=random.randint(50, 150))
     await asyncio.sleep(random.uniform(0.5, 1.5))
     await page.keyboard.press('Enter')
 
     # Wait for results
     await page.wait_for_load_state('domcontentloaded')
-    await asyncio.sleep(random.uniform(2, 4))
+    await asyncio.sleep(random.uniform(3, 5))
 
-    # Look for target URLs in search results
-    target_found = None
-    for target_url in self.target_urls:
-      try:
-        domain = target_url.split('/')[2]
-        link_selector = f'a[href*="{domain}"]'
-        link = await page.query_selector(link_selector)
-        if link and await link.is_visible():
-          await link.scroll_into_view_if_needed()
-          await asyncio.sleep(random.uniform(1, 2))
-          await link.click()
-          target_found = target_url
+    # Look specifically for the target domain in search results
+    try:
+      if self.debug_mode:
+        print(f"🔍 Looking for domain '{search_domain}' in Bing search results...")
+      
+      # Try multiple selectors for finding actual organic result links in Bing
+      selectors = [
+          f'#b_results .b_algo h2 a[href*="{search_domain}"]',  # Bing main organic results
+          f'#b_results h2 a[href*="{search_domain}"]',          # Bing results section headers
+          f'.b_title a[href*="{search_domain}"]',               # Bing title links
+          f'.b_algo h2 a[href*="{search_domain}"]',             # Bing algorithm results
+          f'ol#b_results li h2 a[href*="{search_domain}"]',     # Bing results list items
+          f'h2 a[href*="{search_domain}"]:not([href*="bing.com"])',  # Generic, exclude Bing internal
+          f'a[href*="https://{search_domain}"]',                # Direct HTTPS links
+          f'a[href*="http://{search_domain}"]',                 # Direct HTTP links
+          f'a[href*="www.{search_domain}"]'                     # www links
+      ]
+      
+      link_found = None
+      for selector in selectors:
+        if self.debug_mode:
+          print(f"  Trying selector: {selector}")
+        
+        links = await page.query_selector_all(selector)
+        
+        if self.debug_mode and links:
+          print(f"  Found {len(links)} potential links with this selector")
+          for i, link in enumerate(links[:3]):  # Show first 3
+            try:
+              href = await link.get_attribute('href')
+              text = await link.text_content()
+              print(f"    Link {i+1}: {href} - '{text[:50]}...'")
+            except:
+              pass
+        
+        # Look for visible links that are actual website links (not Bing internal)
+        for link in links:
+          try:
+            if await link.is_visible():
+              href = await link.get_attribute('href')
+              # Make sure it's a real website link, not a Bing internal link
+              if (href and search_domain in href and 
+                  not any(bing_term in href.lower() for bing_term in ['bing.com', '/search?', 'microsofttranslator', 'copilotsearch'])):
+                link_found = link
+                if self.debug_mode:
+                  print(f"  ✅ Found matching visible link: {href}")
+                break
+          except:
+            continue
+        
+        if link_found:
           break
-      except:
-        continue
+      
+      if link_found:
+        await link_found.scroll_into_view_if_needed()
+        await asyncio.sleep(random.uniform(1, 2))
+        
+        if self.debug_mode:
+          print(f"  🖱️ Clicking on the link...")
+          await asyncio.sleep(2)  # Give time to see in debug mode
+        
+        # Get the link URL before clicking
+        target_href = await link_found.get_attribute('href')
+        
+        await link_found.click()
+        
+        # Wait for navigation to complete with retries
+        max_wait_attempts = 3
+        for wait_attempt in range(max_wait_attempts):
+          try:
+            await page.wait_for_load_state('domcontentloaded', timeout=8000)
+            await asyncio.sleep(random.uniform(2, 3))
+            
+            current_url = page.url
+            
+            # Check if we actually navigated to the target domain
+            if search_domain in current_url and 'bing.com' not in current_url:
+              break
+            elif wait_attempt < max_wait_attempts - 1:
+              if self.debug_mode:
+                print(f"  ⏳ Still on Bing, waiting longer... (attempt {wait_attempt + 1})")
+              await asyncio.sleep(3)
+            
+          except:
+            await asyncio.sleep(2)
+        
+        # Get the actual page we landed on
+        actual_url = page.url
+        
+        if self.debug_mode:
+          print(f"  🎯 Landed on: {actual_url}")
+          
+        # If we're still on Bing, try direct navigation as fallback
+        if 'bing.com' in actual_url and target_href:
+          if self.debug_mode:
+            print(f"  🔄 Still on Bing, trying direct navigation to: {target_href}")
+          try:
+            await page.goto(target_href, timeout=10000, wait_until='domcontentloaded')
+            await asyncio.sleep(2)
+            actual_url = page.url
+            if self.debug_mode:
+              print(f"  🎯 Direct navigation result: {actual_url}")
+          except Exception as nav_error:
+            if self.debug_mode:
+              print(f"  ❌ Direct navigation failed: {nav_error}")
+        
+        return search_query, actual_url
+      else:
+        # If target domain not found, provide more debug info
+        if self.debug_mode:
+          print(f"  ❌ No matching links found for domain '{search_domain}'")
+          print(f"  📄 Page title: {await page.title()}")
+          
+          # Get all links on the page for debugging
+          all_links = await page.query_selector_all('a[href]')
+          print(f"  📊 Total links on page: {len(all_links)}")
+          
+          # Show first 10 links
+          print(f"  🔗 First 10 links found:")
+          for i, link in enumerate(all_links[:10]):
+            try:
+              href = await link.get_attribute('href')
+              text = await link.text_content()
+              if href:
+                print(f"    {i+1}. {href} - '{text[:30]}...'")
+            except:
+              pass
+          
+          await asyncio.sleep(5)  # Pause to examine in debug mode
+        
+        raise Exception(f"Target domain '{search_domain}' not found in Bing search results for query: '{search_query}'")
+        
+    except Exception as e:
+      if "not found in search results" in str(e):
+        raise e
+      else:
+        if self.debug_mode:
+          print(f"  ❌ Error during link clicking: {str(e)}")
+          await asyncio.sleep(3)
+        raise Exception(f"Failed to click target link for '{search_domain}': {str(e)}")
 
-    # If no target found in results, raise an error instead of fallback
-    if not target_found:
-      raise Exception(
-        f"No target URLs found in search results for keyword: {keyword}")
-
-    return keyword, target_found
+    return search_query, target_url
 
   async def _run_single_session(self, session_num: int, total_sessions: int, browser_type: BrowserType) -> SessionResult:
     """Run a single automation session"""
@@ -555,7 +715,7 @@ class WebAutomationBot:
         print(f"{Fore.YELLOW}Session {session_num:03d}/{total_sessions} (Attempt {attempt + 1}/{max_proxy_attempts})")
         print(f"{Fore.GREEN}Browser: {browser_type.value.title()}")
         print(f"{Fore.BLUE}Proxy: {proxy.host}:{proxy.port}")
-        print(f"{Fore.MAGENTA}Route: {visit_mode.value.title()}")
+        print(f"{Fore.MAGENTA}Route: {visit_mode.value.title()} ({'Bing' if visit_mode == VisitMode.SEARCH else 'Direct'})")
 
         playwright = await async_playwright().start()
 
@@ -568,18 +728,18 @@ class WebAutomationBot:
 
         if browser_type == BrowserType.FIREFOX:
           browser = await playwright.firefox.launch(
-              headless=True,
+              headless=not self.debug_mode,  # Use visible mode if debug is enabled
               proxy=proxy_config
           )
         elif browser_type == BrowserType.EDGE:
           browser = await playwright.chromium.launch(
-              headless=True,
+              headless=not self.debug_mode,  # Use visible mode if debug is enabled
               proxy=proxy_config,
               channel="msedge"  # Use Edge specifically
           )
         else:  # Chrome
           browser = await playwright.chromium.launch(
-              headless=True,
+              headless=not self.debug_mode,  # Use visible mode if debug is enabled
               proxy=proxy_config
               # Default chromium (Google Chrome)
           )
@@ -605,7 +765,7 @@ class WebAutomationBot:
           keyword, target_url = await self._visit_via_search(page)
           result.url_or_keywords = keyword
           result.target_url_reached = target_url
-          print(f"{Fore.WHITE}Search: {keyword}")
+          print(f"{Fore.WHITE}Bing Search: {keyword}")
           print(f"{Fore.WHITE}Target: {target_url}")
 
         # Wait for page to fully load
@@ -1034,52 +1194,27 @@ class WebAutomationBot:
         f"{Fore.YELLOW}Success Rate: {(successful/total*100):.1f}%" if total > 0 else "")
       print(f"{Fore.CYAN}{'='*50}")
 
-  def generate_test_report(self):
-    """Generate a test PDF report for debugging purposes"""
-    try:
-      print(f"{Fore.CYAN}🧪 Generating test PDF report...")
-
-      # Create test session data
-      test_sessions = [
-        SessionResult(
-          session_number=1,
-          total_sessions=1,
-          browser="chrome",
-          ip_address="192.168.1.100",
-          ip_location="Paris, France",
-          web_route="direct",
-          url_or_keywords="https://www.thebusinesshack.com/hire-a-pro-france",
-          target_url_reached="https://www.thebusinesshack.com/hire-a-pro-france",
-          other_urls_visited=[],
-          time_on_target_url=45.2,
-          clicks=2,
-          success=True,
-          failure_reason=None,
-          timestamp=datetime.now()
-        )
-      ]
-
-      success = self._generate_pdf_report(test_sessions, 1)
-      if success:
-        print(f"{Fore.GREEN}✅ Test report generated successfully!")
-      else:
-        print(f"{Fore.RED}❌ Test report generation failed!")
-      return success
-    except Exception as e:
-      print(f"{Fore.RED}❌ Test report error: {e}")
-      self.logger.error(f"Test report error: {e}")
-      return False
-
 
 if __name__ == "__main__":
   try:
-    bot = WebAutomationBot()
+    # Check for mode arguments
+    debug_mode = '--debug' in sys.argv or '--visible' in sys.argv
+    headless_mode = '--headless' in sys.argv
+    
+    # Default to visible mode unless explicitly headless
+    visible_mode = debug_mode or not headless_mode
+    
+    if visible_mode:
+      print(f"{Fore.YELLOW}[VISIBLE] Browser will be visible")
+    else:
+      print(f"{Fore.CYAN}[HEADLESS] Browser will run in background")
+    
+    bot = WebAutomationBot(debug_mode=visible_mode)
     asyncio.run(bot.run_bot())
   except KeyboardInterrupt:
-    print(f"\n{Fore.YELLOW}🛑 Bot stopped by user (Ctrl+C)")
+    print(f"\n{Fore.YELLOW}Bot stopped by user (Ctrl+C)")
   except Exception as e:
-    print(f"\n{Fore.RED}❌ Fatal error: {e}")
-    print(f"{Fore.YELLOW}💡 Check the logs for more details")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
+    print(f"\n{Fore.RED}Fatal error: {e}")
+    print(f"{Fore.YELLOW}Check the logs for more details")
+    if '--debug' not in sys.argv:
+      print(f"{Fore.CYAN}Try running with --debug flag to see browser actions")

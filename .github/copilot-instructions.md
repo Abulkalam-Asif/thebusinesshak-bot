@@ -45,7 +45,9 @@ This Bot is meant to:
 6. https://www.trouveun.pro/  
 7. https://www.cherche-artisan.com
 
-- Google Searches: any web pages from the above - BUt, Must go to target website - via gooogle
+- Google Searches: any web pages from the above - But, Must go to target website - via Bing (switched from Google to avoid CAPTCHA)
+- Bot runs in VISIBLE MODE by default for monitoring
+- Use --headless flag for background operation
 
 # Additional Notes:
 - Python
