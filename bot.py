@@ -57,6 +57,7 @@ class SessionResult:
   ip_location: str
   web_route: str
   url_or_keywords: str
+  target_url_reached: Optional[str]  # The final target URL that was actually visited
   other_urls_visited: List[str]
   time_on_target_url: float
   clicks: int
@@ -535,6 +536,7 @@ class WebAutomationBot:
           ip_location="Unknown",
           web_route=visit_mode.value,
           url_or_keywords="",
+          target_url_reached=None,
           other_urls_visited=[],
           time_on_target_url=0.0,
           clicks=0,
@@ -596,10 +598,12 @@ class WebAutomationBot:
         if visit_mode == VisitMode.DIRECT:
           target_url = await self._visit_direct(page)
           result.url_or_keywords = target_url
+          result.target_url_reached = target_url
           print(f"{Fore.WHITE}Direct URL: {target_url}")
         else:
           keyword, target_url = await self._visit_via_search(page)
           result.url_or_keywords = keyword
+          result.target_url_reached = target_url
           print(f"{Fore.WHITE}Search: {keyword}")
           print(f"{Fore.WHITE}Target: {target_url}")
 
@@ -740,6 +744,7 @@ class WebAutomationBot:
             ["Location", session.ip_location],
             ["Route", session.web_route],
             ["URL/Keywords", session.url_or_keywords],
+            ["Target URL Reached", session.target_url_reached or "N/A"],
             ["Time on Site", f"{session.time_on_target_url:.1f}s"],
             ["Clicks", str(session.clicks)],
             ["Other URLs", str(len(session.other_urls_visited))],
@@ -821,6 +826,7 @@ class WebAutomationBot:
           "ip_location": result.ip_location,
           "web_route": result.web_route,
           "url_or_keywords": result.url_or_keywords,
+          "target_url_reached": result.target_url_reached,
           "other_urls_visited": result.other_urls_visited,
           "time_on_target_url": round(result.time_on_target_url, 2),
           "clicks": result.clicks,
@@ -885,21 +891,33 @@ class WebAutomationBot:
           with open(latest_results_file, 'r') as f:
             existing_data = json.load(f)
 
-          total = len(existing_data)
-          successful = sum(1 for r in existing_data if r['success'])
+          # Update old format data to include new fields
+          updated_data = []
+          for result in existing_data:
+            # Add missing target_url_reached field for backward compatibility
+            if 'target_url_reached' not in result:
+              # For old results, use the url_or_keywords as target_url_reached for direct visits
+              # For search visits, we don't have the target URL info, so set it to None
+              if result.get('web_route') == 'direct':
+                result['target_url_reached'] = result.get('url_or_keywords')
+              else:
+                result['target_url_reached'] = None
+            updated_data.append(result)
+
+          total = len(updated_data)
+          successful = sum(1 for r in updated_data if r['success'])
 
           if total > 0:
             print(
               f"{Fore.GREEN}📄 Found {total} existing session results in {latest_results_file.name}")
             print(
               f"{Fore.GREEN}📊 Previous success rate: {(successful/total*100):.1f}%")
-
             # Auto-continue with previous sessions (non-blocking)
             print(f"{Fore.GREEN}📈 Continuing from previous session...")
 
-            # Copy existing data to current run's file
+            # Copy updated data to current run's file
             with open(self.results_file, 'w') as f:
-              json.dump(existing_data, f, indent=2)
+              json.dump(updated_data, f, indent=2, default=str)
 
             # Create updated summary
             summary = {
@@ -1030,6 +1048,7 @@ class WebAutomationBot:
           ip_location="Paris, France",
           web_route="direct",
           url_or_keywords="https://www.thebusinesshack.com/hire-a-pro-france",
+          target_url_reached="https://www.thebusinesshack.com/hire-a-pro-france",
           other_urls_visited=[],
           time_on_target_url=45.2,
           clicks=2,
