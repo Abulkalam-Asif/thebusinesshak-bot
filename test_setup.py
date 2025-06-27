@@ -134,7 +134,7 @@ def test_reports_directory():
     """Test reports directory creation"""
     print("\n📊 Testing reports directory...")
     
-    reports_dir = Path.home() / "Desktop" / "Bot_Reports"
+    reports_dir = Path("reports")
     try:
         reports_dir.mkdir(exist_ok=True)
         print(f"✅ Reports directory ready: {reports_dir}")

@@ -106,7 +106,7 @@ self.search_keywords = [
 
 ### Automatic PDF Reports
 - Generated every 50 completed sessions
-- Saved to `~/Desktop/Bot_Reports/` folder
+- Saved to `reports/` folder in the project directory
 - Include detailed session information:
   - Success/failure rates
   - Browser distribution

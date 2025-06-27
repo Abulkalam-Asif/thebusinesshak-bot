@@ -57,7 +57,8 @@ class SessionResult:
   ip_location: str
   web_route: str
   url_or_keywords: str
-  target_url_reached: Optional[str]  # The final target URL that was actually visited
+  # The final target URL that was actually visited
+  target_url_reached: Optional[str]
   other_urls_visited: List[str]
   time_on_target_url: float
   clicks: int
@@ -511,10 +512,10 @@ class WebAutomationBot:
       except:
         continue
 
-    # If no target found in results, visit one directly
+    # If no target found in results, raise an error instead of fallback
     if not target_found:
-      target_found = random.choice(self.target_urls)
-      await page.goto(target_found, timeout=60000)
+      raise Exception(
+        f"No target URLs found in search results for keyword: {keyword}")
 
     return keyword, target_found
 

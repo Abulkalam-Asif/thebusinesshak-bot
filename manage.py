@@ -67,7 +67,7 @@ def show_status():
         print("\n❌ No proxies.txt file found")
     
     # Reports directory
-    reports_dir = Path.home() / "Desktop" / "Bot_Reports"
+    reports_dir = Path("reports")
     if reports_dir.exists():
         report_files = list(reports_dir.glob("*.pdf"))
         print(f"📋 Reports: {len(report_files)} PDF reports in {reports_dir}")

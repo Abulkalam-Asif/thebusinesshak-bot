@@ -64,7 +64,7 @@ python manage.py test-proxies
 ## Reports
 
 - Generated every 50 sessions automatically
-- Saved to `Desktop/Bot_Reports/`
+- Saved to `reports/` folder in the project directory
 - PDF format with detailed session information
 
 ## Troubleshooting

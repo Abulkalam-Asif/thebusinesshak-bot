@@ -79,7 +79,7 @@ goto menu
 :view_reports
 cls
 echo Opening reports folder...
-start "" "%USERPROFILE%\Desktop\Bot_Reports"
+start "" "reports"
 goto menu
 
 :view_logs
