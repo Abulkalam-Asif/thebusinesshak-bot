@@ -1,0 +1,70 @@
+{
+    "bot_settings": {
+        "daily_sessions_min": 20,
+        "daily_sessions_max": 40,
+        "french_hours_start": 8,
+        "french_hours_end": 22,
+        "session_duration_min": 25,
+        "session_duration_max": 90,
+        "max_clicks_per_session": 4,
+        "delay_between_sessions_min": 10,
+        "delay_between_sessions_max": 60,
+        "report_frequency": 50
+    },
+    "target_urls": [
+        "https://www.thebusinesshack.com/hire-a-pro-france",
+        "https://www.mindyourbiz.online/find-a-pro_france",
+        "https://www.arcsaver.com/find-a-pro",
+        "https://www.le-trades.com/find-trades",
+        "https://www.batiexperts.com/trouver-des-artisans",
+        "https://www.trouveun.pro/",
+        "https://www.cherche-artisan.com"
+    ],
+    "search_keywords": [
+        "hire professional France",
+        "find trades France", 
+        "trouver artisan France",
+        "professional services France",
+        "business hack France",
+        "find expert France",
+        "cherche artisan",
+        "services professionnels France",
+        "artisan qualifié France",
+        "expert bâtiment France"
+    ],
+    "browser_weights": {
+        "chromium": 40,
+        "firefox": 35,
+        "edge": 25
+    },
+    "visit_mode_weights": {
+        "direct": 30,
+        "search": 70
+    },
+    "anti_detection": {
+        "viewports": [
+            {"width": 1920, "height": 1080},
+            {"width": 1366, "height": 768},
+            {"width": 1536, "height": 864},
+            {"width": 1440, "height": 900},
+            {"width": 1280, "height": 720},
+            {"width": 1600, "height": 900},
+            {"width": 1024, "height": 768}
+        ],
+        "mouse_movement_frequency": 3,
+        "scroll_patterns": 4,
+        "human_delays": {
+            "typing_min": 50,
+            "typing_max": 150,
+            "click_min": 500,
+            "click_max": 1500,
+            "page_load_min": 2000,
+            "page_load_max": 5000
+        }
+    },
+    "proxy_settings": {
+        "rotation_enabled": true,
+        "connection_timeout": 30,
+        "retry_attempts": 3
+    }
+}

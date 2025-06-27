@@ -1,0 +1,8 @@
+playwright==1.40.0
+requests==2.31.0
+reportlab==4.0.7
+fake-useragent==1.4.0
+pytz==2023.3
+colorama==0.4.6
+asyncio-throttle==1.0.2
+python-dateutil==2.8.2
