@@ -677,92 +677,103 @@ class WebAutomationBot:
 
   def _generate_pdf_report(self, sessions: List[SessionResult], start_session: int):
     """Generate PDF report for sessions"""
-    filename = f"Bot_Report_{start_session}-{start_session + len(sessions) - 1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-    filepath = self.reports_dir / filename
+    try:
+      # Ensure reports directory exists
+      self.reports_dir.mkdir(exist_ok=True)
 
-    doc = SimpleDocTemplate(str(filepath), pagesize=A4)
-    story = []
-    styles = getSampleStyleSheet()
+      filename = f"Bot_Report_{start_session}-{start_session + len(sessions) - 1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+      filepath = self.reports_dir / filename
 
-    # Title
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        spaceAfter=30,
-        alignment=1  # Center
-    )
-    story.append(Paragraph("Web Automation Bot Report", title_style))
-    story.append(Spacer(1, 12))
+      doc = SimpleDocTemplate(str(filepath), pagesize=A4)
+      story = []
+      styles = getSampleStyleSheet()
 
-    # Summary
-    successful_sessions = sum(1 for s in sessions if s.success)
-    failed_sessions = len(sessions) - successful_sessions
+      # Title
+      title_style = ParagraphStyle(
+          'CustomTitle',
+          parent=styles['Heading1'],
+          fontSize=18,
+          spaceAfter=30,
+          alignment=1  # Center
+      )
+      story.append(Paragraph("Web Automation Bot Report", title_style))
+      story.append(Spacer(1, 12))
 
-    summary_data = [
-        ['Report Period',
-         f"Sessions {start_session} - {start_session + len(sessions) - 1}"],
-        ['Total Sessions', str(len(sessions))],
-        ['Successful', str(successful_sessions)],
-        ['Failed', str(failed_sessions)],
-        ['Success Rate', f"{(successful_sessions/len(sessions)*100):.1f}%"],
-        ['Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
-    ]
+      # Summary
+      successful_sessions = sum(1 for s in sessions if s.success)
+      failed_sessions = len(sessions) - successful_sessions
 
-    summary_table = Table(summary_data, colWidths=[2 * inch, 3 * inch])
-    summary_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-
-    story.append(summary_table)
-    story.append(Spacer(1, 20))
-
-    # Sessions details
-    story.append(Paragraph("Session Details", styles['Heading2']))
-    story.append(Spacer(1, 12))
-
-    for session in sessions:
-      session_data = [
-          [f"Session {session.session_number}", ""],
-          ["Browser", session.browser],
-          ["IP Address", session.ip_address],
-          ["Location", session.ip_location],
-          ["Route", session.web_route],
-          ["URL/Keywords", session.url_or_keywords],
-          ["Time on Site", f"{session.time_on_target_url:.1f}s"],
-          ["Clicks", str(session.clicks)],
-          ["Other URLs", str(len(session.other_urls_visited))],
-          ["Status",
-           "✓ Success" if session.success else f"✗ Failed: {session.failure_reason}"],
-          ["Timestamp", session.timestamp.strftime('%Y-%m-%d %H:%M:%S')]
+      summary_data = [
+          ['Report Period',
+           f"Sessions {start_session} - {start_session + len(sessions) - 1}"],
+          ['Total Sessions', str(len(sessions))],
+          ['Successful', str(successful_sessions)],
+          ['Failed', str(failed_sessions)],
+          ['Success Rate',
+           f"{(successful_sessions/len(sessions)*100):.1f}%" if len(sessions) > 0 else "0%"],
+          ['Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
       ]
 
-      session_table = Table(session_data, colWidths=[1.5 * inch, 3.5 * inch])
-      session_table.setStyle(TableStyle([
-          ('BACKGROUND', (0, 0), (1, 0), colors.darkblue),
-          ('TEXTCOLOR', (0, 0), (1, 0), colors.white),
+      summary_table = Table(summary_data, colWidths=[2 * inch, 3 * inch])
+      summary_table.setStyle(TableStyle([
+          ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
+          ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
           ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
           ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-          ('FONTSIZE', (0, 0), (-1, -1), 9),
-          ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-          ('GRID', (0, 0), (-1, -1), 1, colors.black),
-          ('BACKGROUND', (0, 1), (-1, -1),
-           colors.beige if session.success else colors.lightpink)
+          ('FONTSIZE', (0, 0), (-1, -1), 10),
+          ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+          ('GRID', (0, 0), (-1, -1), 1, colors.black)
       ]))
 
-      story.append(session_table)
-      story.append(Spacer(1, 10))
+      story.append(summary_table)
+      story.append(Spacer(1, 20))
 
-    # Build PDF
-    doc.build(story)
-    print(f"\n{Fore.GREEN}📊 Report generated: {filepath}")
-    self.logger.info(f"Report generated: {filepath}")
+      # Sessions details
+      story.append(Paragraph("Session Details", styles['Heading2']))
+      story.append(Spacer(1, 12))
+
+      for session in sessions:
+        session_data = [
+            [f"Session {session.session_number}", ""],
+            ["Browser", session.browser],
+            ["IP Address", session.ip_address],
+            ["Location", session.ip_location],
+            ["Route", session.web_route],
+            ["URL/Keywords", session.url_or_keywords],
+            ["Time on Site", f"{session.time_on_target_url:.1f}s"],
+            ["Clicks", str(session.clicks)],
+            ["Other URLs", str(len(session.other_urls_visited))],
+            ["Status",
+             "✓ Success" if session.success else f"✗ Failed: {session.failure_reason}"],
+            ["Timestamp", session.timestamp.strftime('%Y-%m-%d %H:%M:%S')]
+        ]
+
+        session_table = Table(session_data, colWidths=[1.5 * inch, 3.5 * inch])
+        session_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (1, 0), colors.darkblue),
+            ('TEXTCOLOR', (0, 0), (1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('BACKGROUND', (0, 1), (-1, -1),
+             colors.beige if session.success else colors.lightpink)
+        ]))
+
+        story.append(session_table)
+        story.append(Spacer(1, 10))
+
+      # Build PDF
+      doc.build(story)
+      print(f"\n{Fore.GREEN}📊 Report generated: {filepath}")
+      self.logger.info(f"Report generated: {filepath}")
+      return True
+
+    except Exception as e:
+      print(f"\n{Fore.RED}❌ Failed to generate PDF report: {e}")
+      self.logger.error(f"Failed to generate PDF report: {e}")
+      return False
 
   async def _test_proxy_connection(self, proxy: ProxyInfo) -> bool:
     """Test if proxy is working"""
@@ -883,33 +894,25 @@ class WebAutomationBot:
             print(
               f"{Fore.GREEN}📊 Previous success rate: {(successful/total*100):.1f}%")
 
-            # Ask if user wants to continue or start fresh
-            choice = input(
-              f"\n{Fore.YELLOW}Continue from previous sessions or start fresh? (C)ontinue / (S)tart fresh: ").upper()
+            # Auto-continue with previous sessions (non-blocking)
+            print(f"{Fore.GREEN}📈 Continuing from previous session...")
 
-            if choice == 'S':
-              # Keep existing files but start with new timestamped files
-              print(f"{Fore.YELLOW}📦 Previous results kept in {latest_results_file}")
-              print(f"{Fore.GREEN}🆕 Starting fresh with new timestamped files")
-            else:
-              # Copy existing data to current run's file
-              with open(self.results_file, 'w') as f:
-                json.dump(existing_data, f, indent=2)
+            # Copy existing data to current run's file
+            with open(self.results_file, 'w') as f:
+              json.dump(existing_data, f, indent=2)
 
-              # Create updated summary
-              summary = {
-                  "last_updated": datetime.now().isoformat(),
-                  "total_sessions_completed": total,
-                  "successful_sessions": successful,
-                  "failed_sessions": total - successful,
-                  "success_rate_percent": round((successful / total * 100), 1),
-                  "continued_from": latest_results_file.name
-              }
+            # Create updated summary
+            summary = {
+                "last_updated": datetime.now().isoformat(),
+                "total_sessions_completed": total,
+                "successful_sessions": successful,
+                "failed_sessions": total - successful,
+                "success_rate_percent": round((successful / total * 100), 1),
+                "continued_from": latest_results_file.name
+            }
 
-              with open(self.summary_file, 'w') as f:
-                json.dump(summary, f, indent=2)
-
-              print(f"{Fore.GREEN}📈 Continuing from previous session...")
+            with open(self.summary_file, 'w') as f:
+              json.dump(summary, f, indent=2)
 
     except Exception as e:
       self.logger.error(f"Error loading existing results: {e}")
@@ -917,18 +920,21 @@ class WebAutomationBot:
   async def run_bot(self):
     """Main bot execution function"""
     print(f"{Fore.CYAN}{Style.BRIGHT}🤖 Web Automation Bot Starting...")
-    print(f"{Fore.YELLOW}Loaded {len(self.proxies)} proxies")
+    print(f"{Fore.WHITE}📅 Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{Fore.YELLOW}🔗 Loaded {len(self.proxies)} proxies")
+    print(f"{Fore.BLUE}📂 Reports directory: {self.reports_dir}")
+    print(f"{Fore.BLUE}📂 Results directory: {self.results_dir}")
+    print(f"{Fore.BLUE}📂 Logs directory: {self.logs_dir}")
+    print(f"{Fore.WHITE}{'='*60}")
 
     # Load existing results
     self._load_existing_results()
 
-    # Check French hours
+    # Check French hours - auto-override if outside hours
     if not self._is_french_hours():
-      override = input(
-        f"\n{Fore.YELLOW}Outside French hours (8AM-10PM). Override? (Y/N): ").upper()
-      if override != 'Y':
-        print(f"{Fore.RED}Bot stopped - outside operating hours")
-        return
+      print(
+        f"\n{Fore.YELLOW}⏰ Outside French hours (8AM-10PM) - Auto-overriding to continue...")
+      print(f"{Fore.GREEN}✅ Bot will run outside normal hours")
 
     # Get daily session count
     daily_sessions = self._get_daily_session_count()
@@ -961,7 +967,11 @@ class WebAutomationBot:
         if len(self.session_results) % report_freq == 0:
           start_session = len(self.session_results) - report_freq + 1
           report_sessions = self.session_results[-report_freq:]
-          self._generate_pdf_report(report_sessions, start_session)
+          print(
+            f"\n{Fore.CYAN}📊 Generating report for sessions {start_session}-{len(self.session_results)}...")
+          success = self._generate_pdf_report(report_sessions, start_session)
+          if not success:
+            print(f"{Fore.RED}❌ Report generation failed")
 
         # Random delay between sessions
         delay = random.uniform(10, 60)  # 10-60 seconds
@@ -975,13 +985,23 @@ class WebAutomationBot:
       print(f"\n{Fore.RED}Bot error: {e}")
       self.logger.error(f"Bot error: {e}")
     finally:
-      # Generate final report if there are remaining sessions
-      report_freq = self.config['bot_settings']['report_frequency']
-      if len(self.session_results) % report_freq != 0:
+      # Generate final report if there are remaining sessions or any sessions at all
+      if len(self.session_results) > 0:
+        report_freq = self.config['bot_settings']['report_frequency']
         remaining_sessions = len(self.session_results) % report_freq
-        start_session = len(self.session_results) - remaining_sessions + 1
-        report_sessions = self.session_results[-remaining_sessions:]
-        self._generate_pdf_report(report_sessions, start_session)
+
+        if remaining_sessions != 0:
+          # Generate report for remaining sessions
+          start_session = len(self.session_results) - remaining_sessions + 1
+          report_sessions = self.session_results[-remaining_sessions:]
+          print(
+            f"\n{Fore.CYAN}📊 Generating final report for remaining {remaining_sessions} sessions...")
+          self._generate_pdf_report(report_sessions, start_session)
+        elif len(self.session_results) < report_freq:
+          # If total sessions is less than report frequency, generate report for all sessions
+          print(
+            f"\n{Fore.CYAN}📊 Generating final report for all {len(self.session_results)} sessions...")
+          self._generate_pdf_report(self.session_results, 1)
 
       # Final summary
       successful = sum(1 for r in self.session_results if r.success)
@@ -995,7 +1015,51 @@ class WebAutomationBot:
         f"{Fore.YELLOW}Success Rate: {(successful/total*100):.1f}%" if total > 0 else "")
       print(f"{Fore.CYAN}{'='*50}")
 
+  def generate_test_report(self):
+    """Generate a test PDF report for debugging purposes"""
+    try:
+      print(f"{Fore.CYAN}🧪 Generating test PDF report...")
+
+      # Create test session data
+      test_sessions = [
+        SessionResult(
+          session_number=1,
+          total_sessions=1,
+          browser="chrome",
+          ip_address="192.168.1.100",
+          ip_location="Paris, France",
+          web_route="direct",
+          url_or_keywords="https://www.thebusinesshack.com/hire-a-pro-france",
+          other_urls_visited=[],
+          time_on_target_url=45.2,
+          clicks=2,
+          success=True,
+          failure_reason=None,
+          timestamp=datetime.now()
+        )
+      ]
+
+      success = self._generate_pdf_report(test_sessions, 1)
+      if success:
+        print(f"{Fore.GREEN}✅ Test report generated successfully!")
+      else:
+        print(f"{Fore.RED}❌ Test report generation failed!")
+      return success
+    except Exception as e:
+      print(f"{Fore.RED}❌ Test report error: {e}")
+      self.logger.error(f"Test report error: {e}")
+      return False
+
 
 if __name__ == "__main__":
-  bot = WebAutomationBot()
-  asyncio.run(bot.run_bot())
+  try:
+    bot = WebAutomationBot()
+    asyncio.run(bot.run_bot())
+  except KeyboardInterrupt:
+    print(f"\n{Fore.YELLOW}🛑 Bot stopped by user (Ctrl+C)")
+  except Exception as e:
+    print(f"\n{Fore.RED}❌ Fatal error: {e}")
+    print(f"{Fore.YELLOW}💡 Check the logs for more details")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)

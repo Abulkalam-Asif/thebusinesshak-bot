@@ -39,7 +39,11 @@ goto menu
 cls
 echo Starting Web Automation Bot...
 python bot.py
-pause
+if %errorlevel% neq 0 (
+    echo.
+    echo ❌ Bot stopped with error. Check the logs for details.
+    pause
+)
 goto menu
 
 :show_status
