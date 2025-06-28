@@ -776,11 +776,27 @@ class WebAutomationBot:
           result.target_url_reached = target_url
           print(f"{Fore.WHITE}Direct URL: {target_url}")
         else:
-          keyword, target_url = await self._visit_via_search(page)
-          result.url_or_keywords = keyword
-          result.target_url_reached = target_url
-          print(f"{Fore.WHITE}DuckDuckGo Search: {keyword}")
-          print(f"{Fore.WHITE}Target: {target_url}")
+          try:
+            keyword, target_url = await self._visit_via_search(page)
+            result.url_or_keywords = keyword
+            result.target_url_reached = target_url
+            print(f"{Fore.WHITE}DuckDuckGo Search: {keyword}")
+            print(f"{Fore.WHITE}Target: {target_url}")
+          except Exception as search_error:
+            # Extract search query from error message if possible
+            error_msg = str(search_error)
+            if "search results for query:" in error_msg:
+              # Extract the query from error message like "...for query: 'keyword domain.com'"
+              import re
+              query_match = re.search(r"for query: '([^']+)'", error_msg)
+              if query_match:
+                result.url_or_keywords = query_match.group(1)
+              else:
+                result.url_or_keywords = "Search failed"
+            else:
+              result.url_or_keywords = "Search failed"
+            # Re-raise the exception to be handled by outer try-catch
+            raise search_error
 
         # Wait for page to fully load
         await page.wait_for_load_state('domcontentloaded')
@@ -1128,11 +1144,27 @@ class WebAutomationBot:
     # Load existing results
     self._load_existing_results()
 
-    # Check French hours - auto-override if outside hours
+    # Check French hours and ask user permission if outside hours
+    override_hours = False
     if not self._is_french_hours():
-      print(
-        f"\n{Fore.YELLOW}⏰ Outside French hours (8AM-10PM) - Auto-overriding to continue...")
-      print(f"{Fore.GREEN}✅ Bot will run outside normal hours")
+      print(f"\n{Fore.YELLOW}⏰ Currently outside French business hours (8AM-10PM)")
+      print(f"{Fore.YELLOW}The bot is configured to run only during French hours by default.")
+      while True:
+        response = input(f"\n{Fore.CYAN}Do you wish to run outside of French hours? (Y/N): ").upper().strip()
+        if response in ['Y', 'YES']:
+          override_hours = True
+          print(f"{Fore.GREEN}✅ Bot will run outside normal hours")
+          break
+        elif response in ['N', 'NO']:
+          override_hours = False
+          print(f"{Fore.RED}❌ Bot will respect French hours and exit")
+          print(f"{Fore.YELLOW}Please run the bot between 8AM-10PM French time")
+          return
+        else:
+          print(f"{Fore.RED}Invalid input. Please enter Y or N.")
+    else:
+      print(f"{Fore.GREEN}✅ Running during French business hours (8AM-10PM)")
+      override_hours = True  # Already in valid hours
 
     # Get daily session count
     daily_sessions = self._get_daily_session_count()
@@ -1142,13 +1174,11 @@ class WebAutomationBot:
 
     try:
       for session_num in range(1, daily_sessions + 1):
-        # Check if we should stop (outside hours and not overridden)
-        # Temporarily commented out to avoid blocking
-        # if not self._is_french_hours() and session_num > 1:
-        #   response = input(
-        #     f"\n{Fore.YELLOW}Outside French hours. Continue? (Y/N): ").upper()
-        #   if response != 'Y':
-        #     break
+        # Check if we should stop due to hours (only if not overridden)
+        if not override_hours and not self._is_french_hours():
+          print(f"\n{Fore.YELLOW}⏰ Now outside French hours. Stopping bot...")
+          print(f"{Fore.WHITE}Sessions completed: {session_num - 1}/{daily_sessions}")
+          break
 
         # Random browser selection
         browser_type = random.choice(browser_types)
