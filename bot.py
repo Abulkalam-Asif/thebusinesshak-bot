@@ -57,6 +57,7 @@ class SessionResult:
   ip_location: str
   web_route: str
   url_or_keywords: str
+  search_engine: Optional[str]  # Track which search engine was used (for search mode)
   # The final target URL that was actually visited
   target_url_reached: Optional[str]
   other_urls_visited: List[str]
@@ -490,8 +491,8 @@ class WebAutomationBot:
     await page.goto(target_url, timeout=60000, wait_until='domcontentloaded')
     return target_url
 
-  async def _visit_via_search(self, page: Page) -> Tuple[str, str]:
-    """Visit target URL via Bing search using keyword-URL pairing"""
+  async def _visit_via_search(self, page: Page) -> Tuple[str, str, str]:
+    """Visit target URL via search using random search engine - returns (search_query, target_url, search_engine)"""
     # First select a target URL
     target_url = random.choice(self.target_urls)
     
@@ -513,11 +514,28 @@ class WebAutomationBot:
     # Create search query: "keyword domain.com"
     search_query = f"{keyword} {search_domain}"
 
-    # Go to DuckDuckGo instead of Bing
+    # Randomly select search engine
+    search_engines = ['duckduckgo', 'bing', 'yahoo']
+    selected_engine = random.choice(search_engines)
+    
+    if self.debug_mode:
+      print(f"🔍 Using {selected_engine.title()} search engine")
+    
+    if selected_engine == 'duckduckgo':
+      actual_url = await self._search_duckduckgo(page, search_query, search_domain)
+    elif selected_engine == 'bing':
+      actual_url = await self._search_bing(page, search_query, search_domain)
+    else:  # yahoo
+      actual_url = await self._search_yahoo(page, search_query, search_domain)
+    
+    return search_query, actual_url, selected_engine
+
+  async def _search_duckduckgo(self, page: Page, search_query: str, search_domain: str) -> str:
+    """Search using DuckDuckGo"""
     await page.goto("https://duckduckgo.com", timeout=60000)
     await asyncio.sleep(random.uniform(1, 3))
 
-    # Accept cookies if present (DuckDuckGo may show cookie banner)
+    # Accept cookies if present
     try:
       cookie_button = await page.wait_for_selector('button:has-text("Accept"), .js-cookie-consent-action', timeout=5000)
       if cookie_button:
@@ -536,21 +554,74 @@ class WebAutomationBot:
     await page.wait_for_load_state('domcontentloaded')
     await asyncio.sleep(random.uniform(3, 5))
 
-    # Look specifically for the target domain in search results
+    return await self._find_and_click_target_link(page, search_domain, 'duckduckgo.com', 'DuckDuckGo', search_query)
+
+  async def _search_bing(self, page: Page, search_query: str, search_domain: str) -> str:
+    """Search using Bing"""
+    await page.goto("https://www.bing.com", timeout=60000)
+    await asyncio.sleep(random.uniform(1, 3))
+
+    # Accept cookies if present
+    try:
+      cookie_button = await page.wait_for_selector('#bnp_btn_accept, button:has-text("Accept"), .cookie-banner button', timeout=5000)
+      if cookie_button:
+        await cookie_button.click()
+        await asyncio.sleep(1)
+    except:
+      pass
+
+    # Bing search box
+    search_box = await page.wait_for_selector('input[name="q"], #sb_form_q', timeout=10000)
+    await search_box.type(search_query, delay=random.randint(50, 150))
+    await asyncio.sleep(random.uniform(0.5, 1.5))
+    await page.keyboard.press('Enter')
+
+    # Wait for results
+    await page.wait_for_load_state('domcontentloaded')
+    await asyncio.sleep(random.uniform(3, 5))
+
+    return await self._find_and_click_target_link(page, search_domain, 'bing.com', 'Bing', search_query)
+
+  async def _search_yahoo(self, page: Page, search_query: str, search_domain: str) -> str:
+    """Search using Yahoo"""
+    await page.goto("https://search.yahoo.com", timeout=60000)
+    await asyncio.sleep(random.uniform(1, 3))
+
+    # Accept cookies if present
+    try:
+      cookie_button = await page.wait_for_selector('button[name="agree"], .consent-form button, button:has-text("Accept")', timeout=5000)
+      if cookie_button:
+        await cookie_button.click()
+        await asyncio.sleep(1)
+    except:
+      pass
+
+    # Yahoo search box
+    search_box = await page.wait_for_selector('input[name="p"], #yschsp', timeout=10000)
+    await search_box.type(search_query, delay=random.randint(50, 150))
+    await asyncio.sleep(random.uniform(0.5, 1.5))
+    await page.keyboard.press('Enter')
+
+    # Wait for results
+    await page.wait_for_load_state('domcontentloaded')
+    await asyncio.sleep(random.uniform(3, 5))
+
+    return await self._find_and_click_target_link(page, search_domain, 'yahoo.com', 'Yahoo', search_query)
+
+  async def _find_and_click_target_link(self, page: Page, search_domain: str, engine_domain: str, engine_name: str, search_query: str) -> str:
+    """Generic method to find and click target links across different search engines"""
     try:
       if self.debug_mode:
-        print(f"🔍 Looking for domain '{search_domain}' in DuckDuckGo search results...")
+        print(f"🔍 Looking for domain '{search_domain}' in {engine_name} search results...")
       
-      # Try multiple selectors for finding actual organic result links in DuckDuckGo
+      # Generic selectors that work across search engines
       selectors = [
-          f'a[data-testid="result-title-a"][href*="{search_domain}"]',  # DuckDuckGo main result links
-          f'.result__a[href*="{search_domain}"]',                       # DuckDuckGo result links
-          f'h2 a[href*="{search_domain}"]',                             # Generic h2 links
-          f'a[href*="https://{search_domain}"]',                        # Direct HTTPS links
-          f'a[href*="http://{search_domain}"]',                         # Direct HTTP links
-          f'a[href*="www.{search_domain}"]',                            # www links
-          f'a[href*="{search_domain}"]:not([href*="duckduckgo.com"])',  # Broader search excluding DDG internals
-          f'[href*="{search_domain}"]'                                  # Most general selector
+          f'a[href*="{search_domain}"]',                                 # Any link containing domain
+          f'h2 a[href*="{search_domain}"], h3 a[href*="{search_domain}"]', # Header links
+          f'a[href*="https://{search_domain}"]',                         # HTTPS links
+          f'a[href*="http://{search_domain}"]',                          # HTTP links
+          f'a[href*="www.{search_domain}"]',                             # www links
+          f'[href*="{search_domain}"]:not([href*="{engine_domain}"])',   # Exclude search engine internals
       ]
       
       link_found = None
@@ -570,14 +641,14 @@ class WebAutomationBot:
             except:
               pass
         
-        # Look for visible links that are actual website links (not Bing internal)
+        # Look for visible links that are actual website links
         for link in links:
           try:
             if await link.is_visible():
               href = await link.get_attribute('href')
-              # Make sure it's a real website link, not a DuckDuckGo internal link
+              # Make sure it's a real website link, not a search engine internal link
               if (href and search_domain in href and 
-                  not any(ddg_term in href.lower() for ddg_term in ['duckduckgo.com', '/search?', 'duck.co'])):
+                  not any(engine_term in href.lower() for engine_term in [engine_domain, '/search?', 'cache:', 'translate.'])):
                 link_found = link
                 if self.debug_mode:
                   print(f"  ✅ Found matching visible link: {href}")
@@ -611,11 +682,11 @@ class WebAutomationBot:
             current_url = page.url
             
             # Check if we actually navigated to the target domain
-            if search_domain in current_url and 'duckduckgo.com' not in current_url:
+            if search_domain in current_url and engine_domain not in current_url:
               break
             elif wait_attempt < max_wait_attempts - 1:
               if self.debug_mode:
-                print(f"  ⏳ Still on DuckDuckGo, waiting longer... (attempt {wait_attempt + 1})")
+                print(f"  ⏳ Still on {engine_name}, waiting longer... (attempt {wait_attempt + 1})")
               await asyncio.sleep(3)
             
           except:
@@ -627,10 +698,10 @@ class WebAutomationBot:
         if self.debug_mode:
           print(f"  🎯 Landed on: {actual_url}")
           
-        # If we're still on DuckDuckGo, try direct navigation as fallback
-        if 'duckduckgo.com' in actual_url and target_href:
+        # If we're still on search engine, try direct navigation as fallback
+        if engine_domain in actual_url and target_href:
           if self.debug_mode:
-            print(f"  🔄 Still on DuckDuckGo, trying direct navigation to: {target_href}")
+            print(f"  🔄 Still on {engine_name}, trying direct navigation to: {target_href}")
           try:
             await page.goto(target_href, timeout=10000, wait_until='domcontentloaded')
             await asyncio.sleep(2)
@@ -641,9 +712,9 @@ class WebAutomationBot:
             if self.debug_mode:
               print(f"  ❌ Direct navigation failed: {nav_error}")
         
-        return search_query, actual_url
+        return actual_url
       else:
-        # If target domain not found, provide more debug info
+        # If target domain not found, provide debug info
         if self.debug_mode:
           print(f"  ❌ No matching links found for domain '{search_domain}'")
           print(f"  📄 Page title: {await page.title()}")
@@ -662,25 +733,10 @@ class WebAutomationBot:
                 print(f"    {i+1}. {href} - '{text[:30]}...'")
             except:
               pass
-              
-          # Check if any links contain the domain (case insensitive)
-          domain_matches = []
-          for link in all_links:
-            try:
-              href = await link.get_attribute('href')
-              if href and search_domain.lower() in href.lower():
-                domain_matches.append(href)
-            except:
-              pass
-          
-          if domain_matches:
-            print(f"  🔍 Found {len(domain_matches)} links containing '{search_domain}':")
-            for i, match in enumerate(domain_matches[:5]):
-              print(f"    {i+1}. {match}")
           
           await asyncio.sleep(5)  # Pause to examine in debug mode
         
-        raise Exception(f"Target domain '{search_domain}' not found in DuckDuckGo search results for query: '{search_query}'")
+        raise Exception(f"Target domain '{search_domain}' not found in {engine_name} search results for query: '{search_query}'")
         
     except Exception as e:
       if "not found in search results" in str(e):
@@ -690,8 +746,6 @@ class WebAutomationBot:
           print(f"  ❌ Error during link clicking: {str(e)}")
           await asyncio.sleep(3)
         raise Exception(f"Failed to click target link for '{search_domain}': {str(e)}")
-
-    return search_query, target_url
 
   async def _run_single_session(self, session_num: int, total_sessions: int, browser_type: BrowserType) -> SessionResult:
     """Run a single automation session"""
@@ -711,6 +765,7 @@ class WebAutomationBot:
           ip_location="Unknown",
           web_route=visit_mode.value,
           url_or_keywords="",
+          search_engine=None,  # Will be set for search mode
           target_url_reached=None,
           other_urls_visited=[],
           time_on_target_url=0.0,
@@ -729,7 +784,7 @@ class WebAutomationBot:
         print(f"{Fore.YELLOW}Session {session_num:03d}/{total_sessions} (Attempt {attempt + 1}/{max_proxy_attempts})")
         print(f"{Fore.GREEN}Browser: {browser_type.value.title()}")
         print(f"{Fore.BLUE}Proxy: {proxy.host}:{proxy.port}")
-        print(f"{Fore.MAGENTA}Route: {visit_mode.value.title()} ({'DuckDuckGo' if visit_mode == VisitMode.SEARCH else 'Direct'})")
+        print(f"{Fore.MAGENTA}Route: {visit_mode.value.title()} ({'Search Engine' if visit_mode == VisitMode.SEARCH else 'Direct'})")
 
         playwright = await async_playwright().start()
 
@@ -777,13 +832,14 @@ class WebAutomationBot:
           print(f"{Fore.WHITE}Direct URL: {target_url}")
         else:
           try:
-            keyword, target_url = await self._visit_via_search(page)
+            keyword, target_url, search_engine = await self._visit_via_search(page)
             result.url_or_keywords = keyword
             result.target_url_reached = target_url
-            print(f"{Fore.WHITE}DuckDuckGo Search: {keyword}")
+            result.search_engine = search_engine
+            print(f"{Fore.WHITE}{search_engine.title()} Search: {keyword}")
             print(f"{Fore.WHITE}Target: {target_url}")
           except Exception as search_error:
-            # Extract search query from error message if possible
+            # Extract search query and engine from error message if possible
             error_msg = str(search_error)
             if "search results for query:" in error_msg:
               # Extract the query from error message like "...for query: 'keyword domain.com'"
@@ -793,8 +849,19 @@ class WebAutomationBot:
                 result.url_or_keywords = query_match.group(1)
               else:
                 result.url_or_keywords = "Search failed"
+              
+              # Extract search engine from error message
+              if "DuckDuckGo" in error_msg:
+                result.search_engine = "duckduckgo"
+              elif "Bing" in error_msg:
+                result.search_engine = "bing"
+              elif "Yahoo" in error_msg:
+                result.search_engine = "yahoo"
+              else:
+                result.search_engine = "unknown"
             else:
               result.url_or_keywords = "Search failed"
+              result.search_engine = "unknown"
             # Re-raise the exception to be handled by outer try-catch
             raise search_error
 
@@ -939,6 +1006,7 @@ class WebAutomationBot:
             ["IP Address", session.ip_address],
             ["Location", session.ip_location],
             ["Route", session.web_route],
+            ["Search Engine", session.search_engine.title() if session.search_engine else "N/A (Direct)"],
             ["URL/Keywords", session.url_or_keywords],
             ["Target URL Reached", session.target_url_reached or "N/A"],
             ["Time on Site", f"{session.time_on_target_url:.1f}s"],
