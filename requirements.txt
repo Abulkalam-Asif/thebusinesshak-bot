@@ -6,3 +6,4 @@ pytz==2023.3
 colorama==0.4.6
 asyncio-throttle==1.0.2
 python-dateutil==2.8.2
+psutil==5.9.8

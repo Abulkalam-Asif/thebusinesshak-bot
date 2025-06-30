@@ -20,6 +20,8 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
+import gc
+import psutil
 
 # Initialize colorama for colored terminal output
 init(autoreset=True)
@@ -1089,6 +1091,7 @@ class WebAutomationBot:
           "ip_address": result.ip_address,
           "ip_location": result.ip_location,
           "web_route": result.web_route,
+          "search_engine": result.search_engine,
           "url_or_keywords": result.url_or_keywords,
           "target_url_reached": result.target_url_reached,
           "other_urls_visited": result.other_urls_visited,
@@ -1199,6 +1202,25 @@ class WebAutomationBot:
     except Exception as e:
       self.logger.error(f"Error loading existing results: {e}")
 
+  def _log_resource_usage(self, session_num=None):
+    """Log memory and resource usage for diagnostics"""
+    process = psutil.Process(os.getpid())
+    mem_mb = process.memory_info().rss / 1024 / 1024
+    open_files = process.open_files()
+    children = process.children(recursive=True)
+    msg = f"[Resource] Memory: {mem_mb:.1f} MB | Open files: {len(open_files)} | Child processes: {len(children)}"
+    if session_num is not None:
+        msg = f"Session {session_num}: " + msg
+    print(msg)
+    self.logger.info(msg)
+
+  async def _restart_playwright(self):
+        """Forcefully restart Playwright to clear any lingering resources/processes."""
+        gc.collect()
+        self._log_resource_usage()
+        print("[Playwright] Restarted Playwright and forced garbage collection.")
+        self.logger.info("[Playwright] Restarted Playwright and forced garbage collection.")
+
   async def run_bot(self):
     """Main bot execution function"""
     print(f"{Fore.CYAN}{Style.BRIGHT}🤖 Web Automation Bot Starting...")
@@ -1242,7 +1264,7 @@ class WebAutomationBot:
 
     try:
       for session_num in range(1, daily_sessions + 1):
-        # Check if we should stop due to hours (only if not overridden)
+        # Check if we should stop due to hours (only if overridden)
         if not override_hours and not self._is_french_hours():
           print(f"\n{Fore.YELLOW}⏰ Now outside French hours. Stopping bot...")
           print(f"{Fore.WHITE}Sessions completed: {session_num - 1}/{daily_sessions}")
@@ -1257,6 +1279,18 @@ class WebAutomationBot:
 
         # Save result immediately to file
         self._save_session_result(result)
+
+        # Periodic resource logging and cleanup
+        if session_num % 25 == 0:
+          self._log_resource_usage(session_num)
+          gc.collect()
+          print(f"[GC] Garbage collection forced after {session_num} sessions.")
+          await asyncio.sleep(random.uniform(2, 5))
+
+        # Periodic Playwright restart (every 50 sessions)
+        if session_num % 50 == 0:
+          await self._restart_playwright()
+          await asyncio.sleep(random.uniform(2, 5))
 
         # Generate report every configured frequency
         report_freq = self.config['bot_settings']['report_frequency']
@@ -1274,7 +1308,8 @@ class WebAutomationBot:
         if session_num < daily_sessions:
           print(f"{Fore.YELLOW}⏱️  Waiting {delay:.1f}s before next session...")
           await asyncio.sleep(delay)
-
+        # Always force garbage collection after each session
+        gc.collect()
     except KeyboardInterrupt:
       print(f"\n{Fore.YELLOW}Bot stopped by user")
     except Exception as e:
