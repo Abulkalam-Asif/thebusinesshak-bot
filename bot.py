@@ -4,6 +4,7 @@ import time
 import json
 import os
 import sys
+import re
 from datetime import datetime, timedelta
 import pytz
 from typing import List, Dict, Optional, Tuple
@@ -139,6 +140,7 @@ class WebAutomationBot:
               "french_hours_end": 22,
               "session_duration_min": 25,
               "session_duration_max": 90,
+              "session_timeout": 300,  # 5 minutes default
               "max_clicks_per_session": 4,
               "report_frequency": 50
           },
@@ -178,6 +180,27 @@ class WebAutomationBot:
                   "trouver artisan",
                   "artisan qualifié"
               ]
+          },
+          "browser_weights": {
+              "chromium": 40,
+              "firefox": 35,
+              "edge": 25
+          },
+          "visit_mode_weights": {
+              "direct": 50,
+              "search": 50
+          },
+          "anti_detection": {
+              "viewports": [
+                  { "width": 1024, "height": 768 }
+              ],
+              "mouse_movement_frequency": 3,
+              "scroll_patterns": 4
+          },
+          "proxy_settings": {
+              "rotation_enabled": True,
+              "connection_timeout": 30,
+              "retry_attempts": 3
           }
       }
 
@@ -278,42 +301,13 @@ class WebAutomationBot:
 
   async def _create_browser_context(self, browser: Browser, proxy: ProxyInfo, browser_type: BrowserType) -> BrowserContext:
     """Create browser context with anti-detection measures (proxy set at browser level)"""
-    # Random viewport sizes
-    viewports = [
-        {"width": 1920, "height": 1080},
-        {"width": 1366, "height": 768},
-        {"width": 1536, "height": 864},
-        {"width": 1440, "height": 900},
-        {"width": 1280, "height": 720}
-    ]
-
+    # Reintroduce anti_detection settings in browser context creation
+    viewports = self.config['anti_detection']['viewports']
     viewport = random.choice(viewports)
-
-    # Browser-specific user agents
-    if browser_type == BrowserType.FIREFOX:
-      user_agents = [
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:92.0) Gecko/20100101 Firefox/92.0",
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:93.0) Gecko/20100101 Firefox/93.0"
-      ]
-    elif browser_type == BrowserType.EDGE:
-      user_agents = [
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36 Edg/91.0.864.59",
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36 Edg/92.0.902.55",
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36 Edg/93.0.961.38"
-      ]
-    else:  # Chrome
-      user_agents = [
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36",
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4577.63 Safari/537.36"
-      ]
-
-    user_agent = random.choice(user_agents)
 
     context = await browser.new_context(
         viewport=viewport,
-        user_agent=user_agent,
+        user_agent=self.ua.random,
         locale='fr-FR',
         timezone_id='Europe/Paris',
         permissions=['geolocation'],
@@ -384,18 +378,8 @@ class WebAutomationBot:
   async def _human_like_scrolling(self, page: Page):
     """Simulate human-like scrolling behavior"""
     try:
-      # Random scrolling patterns
-      scroll_patterns = [
-          # Slow continuous scroll down
-          {"direction": "down", "speed": "slow",
-           "distance": random.randint(500, 1500)},
-          # Quick scroll up
-          {"direction": "up", "speed": "fast",
-           "distance": random.randint(200, 800)},
-          # Medium scroll down
-          {"direction": "down", "speed": "medium",
-           "distance": random.randint(800, 2000)},
-      ]
+      # Reintroduce anti_detection settings in scrolling behavior
+      scroll_patterns = self.config['anti_detection']['scroll_patterns']
 
       pattern = random.choice(scroll_patterns)
 
@@ -494,43 +478,46 @@ class WebAutomationBot:
     return target_url
 
   async def _visit_via_search(self, page: Page) -> Tuple[str, str, str]:
-    """Visit target URL via search using random search engine - returns (search_query, target_url, search_engine)"""
-    # First select a target URL
-    target_url = random.choice(self.target_urls)
-    
-    # Get a random keyword entry for that specific target URL
-    available_keywords = self.target_sites[target_url]
-    keyword_entry = random.choice(available_keywords)
-    
-    # Parse the keyword entry format: "keyword, domain.com"
-    if ', ' in keyword_entry:
-      keyword, search_domain = keyword_entry.split(', ', 1)
-    else:
-      # Fallback to old format if comma not found
-      keyword = keyword_entry
-      search_domain = target_url.split('/')[2].replace('www.', '')
-    
-    # Clean up the search domain (remove any www. prefix)
-    search_domain = search_domain.replace('www.', '')
-    
-    # Create search query: "keyword domain.com"
-    search_query = f"{keyword} {search_domain}"
+        """Visit target URL via search using random search engine - returns (search_query, target_url, search_engine)"""
+        # First select a target URL
+        target_url = random.choice(self.target_urls)
 
-    # Randomly select search engine
-    search_engines = ['duckduckgo', 'bing', 'yahoo']
-    selected_engine = random.choice(search_engines)
-    
-    if self.debug_mode:
-      print(f"🔍 Using {selected_engine.title()} search engine")
-    
-    if selected_engine == 'duckduckgo':
-      actual_url = await self._search_duckduckgo(page, search_query, search_domain)
-    elif selected_engine == 'bing':
-      actual_url = await self._search_bing(page, search_query, search_domain)
-    else:  # yahoo
-      actual_url = await self._search_yahoo(page, search_query, search_domain)
-    
-    return search_query, actual_url, selected_engine
+        # Get a random keyword entry for that specific target URL
+        available_keywords = self.target_sites[target_url]
+        keyword_entry = random.choice(available_keywords)
+
+        # Parse the keyword entry format: "keyword, domain.com"
+        if ', ' in keyword_entry:
+            keyword, search_domain = keyword_entry.split(', ', 1)
+        else:
+            # Fallback to old format if comma not found
+            keyword = keyword_entry
+            search_domain = target_url.split('/')[2].replace('www.', '')
+
+        # Clean up the search domain (remove any www. prefix)
+        search_domain = search_domain.replace('www.', '')
+
+        # Create search query: "keyword domain.com"
+        search_query = f"{keyword} {search_domain}"
+
+        # Ensure proper encoding of keywords
+        search_query = search_query.encode('utf-8').decode('utf-8')
+
+        # Randomly select search engine
+        search_engines = ['duckduckgo', 'bing', 'yahoo']
+        selected_engine = random.choice(search_engines)
+
+        if self.debug_mode:
+            print(f"🔍 Using {selected_engine.title()} search engine")
+
+        if selected_engine == 'duckduckgo':
+            actual_url = await self._search_duckduckgo(page, search_query, search_domain)
+        elif selected_engine == 'bing':
+            actual_url = await self._search_bing(page, search_query, search_domain)
+        else:  # yahoo
+            actual_url = await self._search_yahoo(page, search_query, search_domain)
+
+        return search_query, actual_url, selected_engine
 
   async def _search_duckduckgo(self, page: Page, search_query: str, search_domain: str) -> str:
     """Search using DuckDuckGo"""
@@ -611,474 +598,296 @@ class WebAutomationBot:
     return await self._find_and_click_target_link(page, search_domain, 'yahoo.com', 'Yahoo', search_query)
 
   async def _find_and_click_target_link(self, page: Page, search_domain: str, engine_domain: str, engine_name: str, search_query: str) -> str:
-    """Generic method to find and click target links across different search engines"""
-    try:
-      if self.debug_mode:
-        print(f"🔍 Looking for domain '{search_domain}' in {engine_name} search results...")
-      
-      # Generic selectors that work across search engines
-      selectors = [
-          f'a[href*="{search_domain}"]',                                 # Any link containing domain
-          f'h2 a[href*="{search_domain}"], h3 a[href*="{search_domain}"]', # Header links
-          f'a[href*="https://{search_domain}"]',                         # HTTPS links
-          f'a[href*="http://{search_domain}"]',                          # HTTP links
-          f'a[href*="www.{search_domain}"]',                             # www links
-          f'[href*="{search_domain}"]:not([href*="{engine_domain}"])',   # Exclude search engine internals
-      ]
-      
-      link_found = None
-      for selector in selectors:
-        if self.debug_mode:
-          print(f"  Trying selector: {selector}")
-        
-        links = await page.query_selector_all(selector)
-        
-        if self.debug_mode and links:
-          print(f"  Found {len(links)} potential links with this selector")
-          for i, link in enumerate(links[:3]):  # Show first 3
-            try:
-              href = await link.get_attribute('href')
-              text = await link.text_content()
-              print(f"    Link {i+1}: {href} - '{text[:50]}...'")
-            except:
-              pass
-        
-        # Look for visible links that are actual website links
-        for link in links:
-          try:
-            if await link.is_visible():
-              href = await link.get_attribute('href')
-              # Make sure it's a real website link, not a search engine internal link
-              if (href and search_domain in href and 
-                  not any(engine_term in href.lower() for engine_term in [engine_domain, '/search?', 'cache:', 'translate.'])):
-                link_found = link
+        """Generic method to find and click target links across different search engines"""
+        try:
+            if self.debug_mode:
+                print(f"🔍 Looking for domain '{search_domain}' in {engine_name} search results...")
+
+            # Generic selectors that work across search engines
+            selectors = [
+                f'a[href*="{search_domain}"]',                                 # Any link containing domain
+                f'h2 a[href*="{search_domain}"], h3 a[href*="{search_domain}"]', # Header links
+                f'a[href*="https://{search_domain}"]',                         # HTTPS links
+                f'a[href*="http://{search_domain}"]',                          # HTTP links
+                f'a[href*="www.{search_domain}"]',                             # www links
+                f'[href*="{search_domain}"]:not([href*="{engine_domain}"])',   # Exclude search engine internals
+            ]
+            
+            link_found = None
+            for selector in selectors:
                 if self.debug_mode:
-                  print(f"  ✅ Found matching visible link: {href}")
-                break
-          except:
-            continue
-        
-        if link_found:
-          break
-      
-      if link_found:
-        await link_found.scroll_into_view_if_needed()
-        await asyncio.sleep(random.uniform(1, 2))
-        
-        if self.debug_mode:
-          print(f"  🖱️ Clicking on the link...")
-          await asyncio.sleep(2)  # Give time to see in debug mode
-        
-        # Get the link URL before clicking
-        target_href = await link_found.get_attribute('href')
-        
-        await link_found.click()
-        
-        # Wait for navigation to complete with retries
-        max_wait_attempts = 3
-        for wait_attempt in range(max_wait_attempts):
-          try:
-            await page.wait_for_load_state('domcontentloaded', timeout=8000)
-            await asyncio.sleep(random.uniform(2, 3))
+                    print(f"  Trying selector: {selector}")
+                
+                links = await page.query_selector_all(selector)
+                
+                if self.debug_mode and links:
+                    print(f"  Found {len(links)} potential links with this selector")
+                    for i, link in enumerate(links[:3]):  # Show first 3
+                        try:
+                            href = await link.get_attribute('href')
+                            text = await link.text_content()
+                            print(f"    Link {i+1}: {href} - '{text[:50]}...'")
+                        except:
+                            pass
+                
+                # Look for visible links that are actual website links
+                for link in links:
+                    try:
+                        if await link.is_visible():
+                          href = await link.get_attribute('href')
+                          # Make sure it's a real website link, not a search engine internal link
+                          if (href and search_domain in href and 
+                              not any(engine_term in href.lower() for engine_term in [engine_domain, '/search?', 'cache:', 'translate.'])):
+                            link_found = link
+                            if self.debug_mode:
+                              print(f"  ✅ Found matching visible link: {href}")
+                            break
+                    except:
+                        continue
+
+                if link_found:
+                    break
             
-            current_url = page.url
-            
-            # Check if we actually navigated to the target domain
-            if search_domain in current_url and engine_domain not in current_url:
-              break
-            elif wait_attempt < max_wait_attempts - 1:
-              if self.debug_mode:
-                print(f"  ⏳ Still on {engine_name}, waiting longer... (attempt {wait_attempt + 1})")
+            if link_found:
+                await link_found.scroll_into_view_if_needed()
+                await asyncio.sleep(random.uniform(1, 2))
+                
+                if self.debug_mode:
+                  print(f"  🖱️ Clicking on the link...")
+                  await asyncio.sleep(2)  # Give time to see in debug mode
+                
+                # Get the link URL before clicking
+                target_href = await link_found.get_attribute('href')
+                
+                await link_found.click()
+                
+                # Wait for navigation to complete with retries
+                max_wait_attempts = 3
+                for wait_attempt in range(max_wait_attempts):
+                  try:
+                    await page.wait_for_load_state('domcontentloaded', timeout=8000)
+                    await asyncio.sleep(random.uniform(2, 3))
+                    
+                    current_url = page.url
+                    
+                    # Check if we actually navigated to the target domain
+                    if search_domain in current_url and engine_domain not in current_url:
+                      break
+                    elif wait_attempt < max_wait_attempts - 1:
+                      if self.debug_mode:
+                        print(f"  ⏳ Still on {engine_name}, waiting longer... (attempt {wait_attempt + 1})")
+                      await asyncio.sleep(3)
+                    
+                  except:
+                    await asyncio.sleep(2)
+                
+                # Get the actual page we landed on
+                actual_url = page.url
+                
+                if self.debug_mode:
+                  print(f"  🎯 Landed on: {actual_url}")
+                
+                # If we're still on search engine, try direct navigation as fallback
+                if engine_domain in actual_url and target_href:
+                  if self.debug_mode:
+                    print(f"  🔄 Still on {engine_name}, trying direct navigation to: {target_href}")
+                  try:
+                    await page.goto(target_href, timeout=10000, wait_until='domcontentloaded')
+                    await asyncio.sleep(2)
+                    actual_url = page.url
+                    if self.debug_mode:
+                      print(f"  🎯 Direct navigation result: {actual_url}")
+                  except Exception as nav_error:
+                    if self.debug_mode:
+                      print(f"  ❌ Direct navigation failed: {nav_error}")
+                
+                return actual_url
+            else:
+                # If target domain not found, provide debug info
+                if self.debug_mode:
+                  print(f"  ❌ No matching links found for domain '{search_domain}'")
+                  print(f"  📄 Page title: {await page.title()}")
+                  
+                  # Get all links on the page for debugging
+                  all_links = await page.query_selector_all('a[href]')
+                  print(f"  📊 Total links on page: {len(all_links)}")
+                  
+                  # Show first 10 links
+                  print(f"  🔗 First 10 links found:")
+                  for i, link in enumerate(all_links[:10]):
+                    try:
+                      href = await link.get_attribute('href')
+                      text = await link.text_content()
+                      if href:
+                        print(f"    {i+1}. {href} - '{text[:30]}...'")
+                    except:
+                      pass
+                  
+                  await asyncio.sleep(5)  # Pause to examine in debug mode
+                
+                raise Exception(f"Target domain '{search_domain}' not found in {engine_name} search results for query: '{search_query}'")
+        
+        except Exception as e:
+          if "not found in search results" in str(e):
+            raise e
+          else:
+            if self.debug_mode:
+              print(f"  ❌ Error during link clicking: {str(e)}")
               await asyncio.sleep(3)
-            
-          except:
-            await asyncio.sleep(2)
-        
-        # Get the actual page we landed on
-        actual_url = page.url
-        
-        if self.debug_mode:
-          print(f"  🎯 Landed on: {actual_url}")
-          
-        # If we're still on search engine, try direct navigation as fallback
-        if engine_domain in actual_url and target_href:
-          if self.debug_mode:
-            print(f"  🔄 Still on {engine_name}, trying direct navigation to: {target_href}")
-          try:
-            await page.goto(target_href, timeout=10000, wait_until='domcontentloaded')
-            await asyncio.sleep(2)
-            actual_url = page.url
-            if self.debug_mode:
-              print(f"  🎯 Direct navigation result: {actual_url}")
-          except Exception as nav_error:
-            if self.debug_mode:
-              print(f"  ❌ Direct navigation failed: {nav_error}")
-        
-        return actual_url
-      else:
-        # If target domain not found, provide debug info
-        if self.debug_mode:
-          print(f"  ❌ No matching links found for domain '{search_domain}'")
-          print(f"  📄 Page title: {await page.title()}")
-          
-          # Get all links on the page for debugging
-          all_links = await page.query_selector_all('a[href]')
-          print(f"  📊 Total links on page: {len(all_links)}")
-          
-          # Show first 10 links
-          print(f"  🔗 First 10 links found:")
-          for i, link in enumerate(all_links[:10]):
-            try:
-              href = await link.get_attribute('href')
-              text = await link.text_content()
-              if href:
-                print(f"    {i+1}. {href} - '{text[:30]}...'")
-            except:
-              pass
-          
-          await asyncio.sleep(5)  # Pause to examine in debug mode
-        
-        raise Exception(f"Target domain '{search_domain}' not found in {engine_name} search results for query: '{search_query}'")
-        
-    except Exception as e:
-      if "not found in search results" in str(e):
-        raise e
-      else:
-        if self.debug_mode:
-          print(f"  ❌ Error during link clicking: {str(e)}")
-          await asyncio.sleep(3)
-        raise Exception(f"Failed to click target link for '{search_domain}': {str(e)}")
+            raise Exception(f"Failed to click target link for '{search_domain}': {str(e)}")
 
   async def _run_single_session(self, session_num: int, total_sessions: int, browser_type: BrowserType) -> SessionResult:
-    """Run a single automation session"""
-    # Try up to 3 different proxies only for connection/browser issues, not search failures
+    """Run a single automation session with timeout"""
     max_proxy_attempts = 3
+    # Use session_timeout from config (default to 300 if not set)
+    session_timeout = self.config['bot_settings'].get('session_timeout', 300)
 
     for attempt in range(max_proxy_attempts):
-      proxy = self._get_random_proxy()
-      visit_mode = random.choice([VisitMode.DIRECT, VisitMode.SEARCH])
+        # Reintroduce proxy_settings in proxy handling
+        proxy = self._get_random_proxy()
+        visit_mode = random.choices(
+            [VisitMode.DIRECT, VisitMode.SEARCH],
+            weights=[self.config['visit_mode_weights']['direct'], self.config['visit_mode_weights']['search']]
+        )[0]
 
-      # Initialize session result
-      result = SessionResult(
-          session_number=session_num,
-          total_sessions=total_sessions,
-          browser=browser_type.value,
-          ip_address="Unknown",
-          ip_location="Unknown",
-          web_route=visit_mode.value,
-          url_or_keywords="",
-          search_engine=None,  # Will be set for search mode
-          target_url_reached=None,
-          other_urls_visited=[],
-          time_on_target_url=0.0,
-          clicks=0,
-          success=False,
-          failure_reason=None,
-          timestamp=datetime.now()
-      )
+        result = SessionResult(
+            session_number=session_num,
+            total_sessions=total_sessions,
+            browser=browser_type.value,
+            ip_address="Unknown",
+            ip_location="Unknown",
+            web_route=visit_mode.value,
+            url_or_keywords="",
+            search_engine=None,
+            target_url_reached=None,
+            other_urls_visited=[],
+            time_on_target_url=0.0,
+            clicks=0,
+            success=False,
+            failure_reason=None,
+            timestamp=datetime.now()
+        )
 
-      playwright = None
-      browser = None
-      context = None
-
-      try:
-        print(f"\n{Fore.CYAN}{'='*50}")
-        print(f"{Fore.YELLOW}Session {session_num:03d}/{total_sessions} (Attempt {attempt + 1}/{max_proxy_attempts})")
-        print(f"{Fore.GREEN}Browser: {browser_type.value.title()}")
-        print(f"{Fore.BLUE}Proxy: {proxy.host}:{proxy.port}")
-        print(f"{Fore.MAGENTA}Route: {visit_mode.value.title()} ({'Search Engine' if visit_mode == VisitMode.SEARCH else 'Direct'})")
-
-        playwright = await async_playwright().start()
-
-        # Launch browser based on type with proxy
-        proxy_config = {
-            "server": f"http://{proxy.host}:{proxy.port}",
-            "username": proxy.username,
-            "password": proxy.password
-        }
-
-        if browser_type == BrowserType.FIREFOX:
-          browser = await playwright.firefox.launch(
-              headless=not self.debug_mode,  # Use visible mode if debug is enabled
-              proxy=proxy_config
-          )
-        elif browser_type == BrowserType.EDGE:
-          browser = await playwright.chromium.launch(
-              headless=not self.debug_mode,  # Use visible mode if debug is enabled
-              proxy=proxy_config,
-              channel="msedge"  # Use Edge specifically
-          )
-        else:  # Chrome
-          browser = await playwright.chromium.launch(
-              headless=not self.debug_mode,  # Use visible mode if debug is enabled
-              proxy=proxy_config
-              # Default chromium (Google Chrome)
-          )
-
-        # Create context with anti-detection measures (proxy already set at browser level)
-        context = await self._create_browser_context(browser, proxy, browser_type)
-        page = await context.new_page()
-
-        # Get IP information
-        result.ip_address, result.ip_location = await self._get_ip_info(page)
-        print(f"{Fore.CYAN}IP: {result.ip_address}")
-        print(f"{Fore.CYAN}Location: {result.ip_location}")
-
-        # Visit target based on mode
-        start_time = time.time()
-
-        if visit_mode == VisitMode.DIRECT:
-          target_url = await self._visit_direct(page)
-          result.url_or_keywords = target_url
-          result.target_url_reached = target_url
-          print(f"{Fore.WHITE}Direct URL: {target_url}")
-        else:
-          try:
-            keyword, target_url, search_engine = await self._visit_via_search(page)
-            result.url_or_keywords = keyword
-            result.target_url_reached = target_url
-            result.search_engine = search_engine
-            print(f"{Fore.WHITE}{search_engine.title()} Search: {keyword}")
-            print(f"{Fore.WHITE}Target: {target_url}")
-          except Exception as search_error:
-            # Extract search query and engine from error message if possible
-            error_msg = str(search_error)
-            if "search results for query:" in error_msg:
-              # Extract the query from error message like "...for query: 'keyword domain.com'"
-              import re
-              query_match = re.search(r"for query: '([^']+)'", error_msg)
-              if query_match:
-                result.url_or_keywords = query_match.group(1)
-              else:
-                result.url_or_keywords = "Search failed"
-              
-              # Extract search engine from error message
-              if "DuckDuckGo" in error_msg:
-                result.search_engine = "duckduckgo"
-              elif "Bing" in error_msg:
-                result.search_engine = "bing"
-              elif "Yahoo" in error_msg:
-                result.search_engine = "yahoo"
-              else:
-                result.search_engine = "unknown"
-            else:
-              result.url_or_keywords = "Search failed"
-              result.search_engine = "unknown"
-            # Re-raise the exception to be handled by outer try-catch
-            raise search_error
-
-        # Wait for page to fully load
-        await page.wait_for_load_state('domcontentloaded')
-        await asyncio.sleep(random.uniform(2, 5))
-
-        # Human-like interactions
-        await self._human_like_mouse_movement(page)
-        await asyncio.sleep(random.uniform(1, 2))
-
-        await self._human_like_scrolling(page)
-        await asyncio.sleep(random.uniform(1, 3))
-
-        # Random clicks and collect visited URLs
-        clicks, visited_urls = await self._random_clicks(page)
-        result.clicks = clicks
-        result.other_urls_visited = visited_urls
-
-        # Stay on page for random time (configured duration)
-        settings = self.config['bot_settings']
-        stay_time = random.uniform(
-          settings['session_duration_min'], settings['session_duration_max'])
-        print(f"{Fore.GREEN}Staying for {stay_time:.1f} seconds...")
-
-        # During stay time, perform additional human-like actions
-        end_time = time.time() + stay_time
-        while time.time() < end_time:
-          action = random.choice(['scroll', 'mouse', 'wait'])
-          if action == 'scroll':
-            await self._human_like_scrolling(page)
-          elif action == 'mouse':
-            await self._human_like_mouse_movement(page)
-          else:
-            await asyncio.sleep(random.uniform(5, 15))
-
-        total_time = time.time() - start_time
-        result.time_on_target_url = total_time
-        result.success = True
-
-        print(f"{Fore.GREEN}✓ Session completed successfully")
-        print(f"{Fore.WHITE}Clicks: {clicks}")
-        print(f"{Fore.WHITE}Time on site: {total_time:.1f}s")
-        if visited_urls:
-          print(f"{Fore.WHITE}Other URLs visited: {len(visited_urls)}")
-
-        # Success! Break out of retry loop
-        break
-
-      except Exception as e:
-        result.failure_reason = str(e)
-        result.success = False
-        print(f"{Fore.RED}✗ Session failed: {e}")
-
-        # Only retry for connection/browser issues, not search failures
-        if "not found in search results" in str(e) or "Failed to click target link" in str(e):
-          self.logger.warning(f"Session {session_num} failed due to search issue: {e}")
-          print(f"{Fore.YELLOW}Moving to next session (search-related failure)...")
-          break  # Don't retry for search failures
-        elif attempt < max_proxy_attempts - 1:
-          print(f"{Fore.YELLOW}Retrying with different proxy...")
-          await asyncio.sleep(random.uniform(2, 5))
-        else:
-          self.logger.error(
-            f"Session {session_num} failed after {max_proxy_attempts} attempts: {e}")
-
-      finally:
-        # Cleanup
         try:
-          if context:
-            await context.close()
-          if browser:
-            await browser.close()
-          if playwright:
-            await playwright.stop()
+            print(f"\n{Fore.CYAN}{'='*50}")
+            print(f"{Fore.YELLOW}Session {session_num:03d}/{total_sessions} (Attempt {attempt + 1}/{max_proxy_attempts})")
+
+            # Run session logic with timeout
+            result = await asyncio.wait_for(
+                self._execute_session(session_num, total_sessions, browser_type, proxy, visit_mode, result),
+                timeout=session_timeout
+            )
+
+            # Log success or failure
+            if result.success:
+                self.logger.info(f"Session {session_num} completed successfully.")
+            else:
+                self.logger.warning(f"Session {session_num} failed: {result.failure_reason}")
+
+            return result
+
+        except asyncio.TimeoutError:
+            result.failure_reason = f"Session timed out after {session_timeout} seconds."
+            result.success = False
+            self.logger.error(f"Session {session_num} timed out.")
+            return result
+
         except Exception as e:
-          self.logger.error(f"Cleanup error: {e}")
+            result.failure_reason = str(e)
+            result.success = False
+            self.logger.error(f"Session {session_num} encountered an error: {e}")
+            return result
 
     return result
 
-  def _generate_pdf_report(self, sessions: List[SessionResult], start_session: int):
-    """Generate PDF report for sessions"""
+  async def _execute_session(self, session_num: int, total_sessions: int, browser_type: BrowserType, proxy: ProxyInfo, visit_mode: VisitMode, result: SessionResult) -> SessionResult:
+    """Execute the session logic"""
+    playwright = None
+    browser = None
+    context = None
+
     try:
-      # Ensure reports directory exists
-      self.reports_dir.mkdir(exist_ok=True)
+        playwright = await async_playwright().start()
+        browser = await self._launch_browser(playwright, browser_type, proxy)
+        context = await self._create_browser_context(browser, proxy, browser_type)
+        page = await context.new_page()
 
-      filename = f"Bot_Report_{start_session}-{start_session + len(sessions) - 1}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-      filepath = self.reports_dir / filename
+        result.ip_address, result.ip_location = await self._get_ip_info(page)
 
-      doc = SimpleDocTemplate(str(filepath), pagesize=A4)
-      story = []
-      styles = getSampleStyleSheet()
+        if visit_mode == VisitMode.DIRECT:
+            target_url = await self._visit_direct(page)
+            result.url_or_keywords = target_url
+            result.target_url_reached = target_url
+        else:
+            try:
+                keyword, target_url, search_engine = await self._visit_via_search(page)
+                result.url_or_keywords = keyword
+                result.target_url_reached = target_url
+                result.search_engine = search_engine
+            except Exception as search_error:
+                error_msg = str(search_error)
+                if "search results for query:" in error_msg:
+                    query_match = re.search(r"for query: '([^']+)'", error_msg)
+                    if query_match:
+                        result.url_or_keywords = query_match.group(1)
+                    else:
+                        result.url_or_keywords = "Search failed"
 
-      # Title
-      title_style = ParagraphStyle(
-          'CustomTitle',
-          parent=styles['Heading1'],
-          fontSize=18,
-          spaceAfter=30,
-          alignment=1  # Center
-      )
-      story.append(Paragraph("Web Automation Bot Report", title_style))
-      story.append(Spacer(1, 12))
+                    if "DuckDuckGo" in error_msg:
+                        result.search_engine = "duckduckgo"
+                    elif "Bing" in error_msg:
+                        result.search_engine = "bing"
+                    elif "Yahoo" in error_msg:
+                        result.search_engine = "yahoo"
+                    else:
+                        result.search_engine = "unknown"
+                else:
+                    result.url_or_keywords = "Search failed"
+                    result.search_engine = "unknown"
+                raise search_error
 
-      # Summary
-      successful_sessions = sum(1 for s in sessions if s.success)
-      failed_sessions = len(sessions) - successful_sessions
+        await self._perform_human_interactions(page, result)
 
-      summary_data = [
-          ['Report Period',
-           f"Sessions {start_session} - {start_session + len(sessions) - 1}"],
-          ['Total Sessions', str(len(sessions))],
-          ['Successful', str(successful_sessions)],
-          ['Failed', str(failed_sessions)],
-          ['Success Rate',
-           f"{(successful_sessions/len(sessions)*100):.1f}%" if len(sessions) > 0 else "0%"],
-          ['Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
-      ]
-
-      summary_table = Table(summary_data, colWidths=[2 * inch, 3 * inch])
-      summary_table.setStyle(TableStyle([
-          ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
-          ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-          ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-          ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-          ('FONTSIZE', (0, 0), (-1, -1), 10),
-          ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-          ('GRID', (0, 0), (-1, -1), 1, colors.black)
-      ]))
-
-      story.append(summary_table)
-      story.append(Spacer(1, 20))
-
-      # Sessions details
-      story.append(Paragraph("Session Details", styles['Heading2']))
-      story.append(Spacer(1, 12))
-
-      for session in sessions:
-        session_data = [
-            [f"Session {session.session_number}", ""],
-            ["Browser", session.browser],
-            ["IP Address", session.ip_address],
-            ["Location", session.ip_location],
-            ["Route", session.web_route],
-            ["Search Engine", session.search_engine.title() if session.search_engine else "N/A (Direct)"],
-            ["URL/Keywords", session.url_or_keywords],
-            ["Target URL Reached", session.target_url_reached or "N/A"],
-            ["Time on Site", f"{session.time_on_target_url:.1f}s"],
-            ["Clicks", str(session.clicks)],
-            ["Other URLs", str(len(session.other_urls_visited))],
-            ["Status",
-             "✓ Success" if session.success else f"✗ Failed: {session.failure_reason}"],
-            ["Timestamp", session.timestamp.strftime('%Y-%m-%d %H:%M:%S')]
-        ]
-
-        session_table = Table(session_data, colWidths=[1.5 * inch, 3.5 * inch])
-        session_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (1, 0), colors.darkblue),
-            ('TEXTCOLOR', (0, 0), (1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 9),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('BACKGROUND', (0, 1), (-1, -1),
-             colors.beige if session.success else colors.lightpink)
-        ]))
-
-        story.append(session_table)
-        story.append(Spacer(1, 10))
-
-      # Build PDF
-      doc.build(story)
-      print(f"\n{Fore.GREEN}📊 Report generated: {filepath}")
-      self.logger.info(f"Report generated: {filepath}")
-      return True
+        result.success = True
 
     except Exception as e:
-      print(f"\n{Fore.RED}❌ Failed to generate PDF report: {e}")
-      self.logger.error(f"Failed to generate PDF report: {e}")
-      return False
+        result.failure_reason = str(e)
+        result.success = False
 
-  async def _test_proxy_connection(self, proxy: ProxyInfo) -> bool:
-    """Test if proxy is working"""
-    try:
-      playwright = await async_playwright().start()
+    finally:
+        if context:
+            await context.close()
+        if browser:
+            await browser.close()
+        if playwright:
+            await playwright.stop()
 
-      proxy_config = {
-          "server": f"http://{proxy.host}:{proxy.port}",
-          "username": proxy.username,
-          "password": proxy.password
-      }
+    return result
 
-      # Use Chrome for proxy testing (most compatible)
-      browser = await playwright.chromium.launch(
-          headless=True,
-          proxy=proxy_config
-      )
+  async def _perform_human_interactions(self, page: Page, result: SessionResult):
+    """Perform human-like interactions on the page"""
+    await asyncio.sleep(random.uniform(2, 5))
+    await self._human_like_mouse_movement(page)
+    await asyncio.sleep(random.uniform(1, 2))
+    await self._human_like_scrolling(page)
+    await asyncio.sleep(random.uniform(1, 3))
 
-      context = await browser.new_context()
-      page = await context.new_page()
+    clicks, visited_urls = await self._random_clicks(page)
+    result.clicks = clicks
+    result.other_urls_visited = visited_urls
 
-      # Try to access a simple page
-      await page.goto("https://httpbin.org/ip", timeout=15000)
-      content = await page.content()
+    settings = self.config['bot_settings']
+    stay_time = random.uniform(settings['session_duration_min'], settings['session_duration_max'])
+    end_time = time.time() + stay_time
 
-      await browser.close()
-      await playwright.stop()
-
-      return "origin" in content.lower()
-
-    except Exception as e:
-      self.logger.debug(
-        f"Proxy test failed for {proxy.host}:{proxy.port} - {e}")
-      return False
+    while time.time() < end_time:
+        action = random.choice(['scroll', 'mouse', 'wait'])
+        if action == 'scroll':
+            await self._human_like_scrolling(page)
+        elif action == 'mouse':
+            await self._human_like_mouse_movement(page)
+        else:
+            await asyncio.sleep(random.uniform(5, 15))
 
   def _save_session_result(self, result: SessionResult):
     """Save session result to JSON file immediately after completion"""
@@ -1145,7 +954,7 @@ class WebAutomationBot:
       self.logger.error(f"Failed to save session result: {e}")
 
   def _load_existing_results(self):
-    """Load existing session results on startup"""
+    """Load existing session results on startup and ask user if they want to continue from previous session."""
     try:
       # Look for the most recent results file in the results directory
       if self.results_dir.exists():
@@ -1163,8 +972,6 @@ class WebAutomationBot:
           for result in existing_data:
             # Add missing target_url_reached field for backward compatibility
             if 'target_url_reached' not in result:
-              # For old results, use the url_or_keywords as target_url_reached for direct visits
-              # For search visits, we don't have the target URL info, so set it to None
               if result.get('web_route') == 'direct':
                 result['target_url_reached'] = result.get('url_or_keywords')
               else:
@@ -1179,26 +986,32 @@ class WebAutomationBot:
               f"{Fore.GREEN}📄 Found {total} existing session results in {latest_results_file.name}")
             print(
               f"{Fore.GREEN}📊 Previous success rate: {(successful/total*100):.1f}%")
-            # Auto-continue with previous sessions (non-blocking)
-            print(f"{Fore.GREEN}📈 Continuing from previous session...")
-
-            # Copy updated data to current run's file
-            with open(self.results_file, 'w') as f:
-              json.dump(updated_data, f, indent=2, default=str)
-
-            # Create updated summary
-            summary = {
-                "last_updated": datetime.now().isoformat(),
-                "total_sessions_completed": total,
-                "successful_sessions": successful,
-                "failed_sessions": total - successful,
-                "success_rate_percent": round((successful / total * 100), 1),
-                "continued_from": latest_results_file.name
-            }
-
-            with open(self.summary_file, 'w') as f:
-              json.dump(summary, f, indent=2)
-
+            # Ask user if they want to continue from previous session
+            while True:
+              response = input(f"{Fore.CYAN}Do you want to continue from the previous session? (Y/N): ").strip().upper()
+              if response in ['Y', 'YES']:
+                print(f"{Fore.GREEN}📈 Continuing from previous session...")
+                # Copy updated data to current run's file
+                with open(self.results_file, 'w') as f:
+                  json.dump(updated_data, f, indent=2, default=str)
+                # Create updated summary
+                summary = {
+                    "last_updated": datetime.now().isoformat(),
+                    "total_sessions_completed": total,
+                    "successful_sessions": successful,
+                    "failed_sessions": total - successful,
+                    "success_rate_percent": round((successful / total * 100), 1),
+                    "continued_from": latest_results_file.name
+                }
+                with open(self.summary_file, 'w') as f:
+                  json.dump(summary, f, indent=2)
+                break
+              elif response in ['N', 'NO']:
+                print(f"{Fore.YELLOW}Starting a new session. Previous results will not be loaded.")
+                # Do not copy previous results
+                break
+              else:
+                print(f"{Fore.RED}Invalid response. Please enter Y or N.")
     except Exception as e:
       self.logger.error(f"Error loading existing results: {e}")
 
@@ -1221,6 +1034,31 @@ class WebAutomationBot:
         print("[Playwright] Restarted Playwright and forced garbage collection.")
         self.logger.info("[Playwright] Restarted Playwright and forced garbage collection.")
 
+  async def _launch_browser(self, playwright, browser_type: BrowserType, proxy: ProxyInfo):
+    """Launch browser with proxy configuration"""
+    proxy_config = {
+        "server": f"http://{proxy.host}:{proxy.port}",
+        "username": proxy.username,
+        "password": proxy.password
+    }
+
+    if browser_type == BrowserType.FIREFOX:
+        return await playwright.firefox.launch(
+            headless=not self.debug_mode,
+            proxy=proxy_config
+        )
+    elif browser_type == BrowserType.EDGE:
+        return await playwright.chromium.launch(
+            headless=not self.debug_mode,
+            proxy=proxy_config,
+            channel="msedge"
+        )
+    else:  # Chrome
+        return await playwright.chromium.launch(
+            headless=not self.debug_mode,
+            proxy=proxy_config
+        )
+
   async def run_bot(self):
     """Main bot execution function"""
     print(f"{Fore.CYAN}{Style.BRIGHT}🤖 Web Automation Bot Starting...")
@@ -1234,27 +1072,24 @@ class WebAutomationBot:
     # Load existing results
     self._load_existing_results()
 
-    # Check French hours and ask user permission if outside hours
+    # Check French hours and ask user permission if outside hours only once
     override_hours = False
     if not self._is_french_hours():
-      print(f"\n{Fore.YELLOW}⏰ Currently outside French business hours (8AM-10PM)")
-      print(f"{Fore.YELLOW}The bot is configured to run only during French hours by default.")
-      while True:
-        response = input(f"\n{Fore.CYAN}Do you wish to run outside of French hours? (Y/N): ").upper().strip()
-        if response in ['Y', 'YES']:
-          override_hours = True
-          print(f"{Fore.GREEN}✅ Bot will run outside normal hours")
-          break
-        elif response in ['N', 'NO']:
-          override_hours = False
-          print(f"{Fore.RED}❌ Bot will respect French hours and exit")
-          print(f"{Fore.YELLOW}Please run the bot between 8AM-10PM French time")
-          return
-        else:
-          print(f"{Fore.RED}Invalid input. Please enter Y or N.")
+        print(f"\n{Fore.YELLOW}⏰ Currently outside French business hours (8AM-10PM)")
+        print(f"{Fore.YELLOW}The bot is configured to run only during French hours by default.")
+        while True:
+            response = input(f"\n{Fore.CYAN}Do you wish to run outside of French hours? (Y/N): ").upper().strip()
+            if response in ['Y', 'YES']:
+                override_hours = True
+                break
+            elif response in ['N', 'NO']:
+                override_hours = False
+                break
+            else:
+                print(f"{Fore.RED}Invalid response. Please enter Y or N.")
     else:
-      print(f"{Fore.GREEN}✅ Running during French business hours (8AM-10PM)")
-      override_hours = True  # Already in valid hours
+        print(f"{Fore.GREEN}✅ Running during French business hours (8AM-10PM)")
+        override_hours = True  # Already in valid hours
 
     # Get daily session count
     daily_sessions = self._get_daily_session_count()
@@ -1263,53 +1098,55 @@ class WebAutomationBot:
     browser_types = [BrowserType.CHROME, BrowserType.FIREFOX, BrowserType.EDGE]
 
     try:
-      for session_num in range(1, daily_sessions + 1):
-        # Check if we should stop due to hours (only if overridden)
-        if not override_hours and not self._is_french_hours():
-          print(f"\n{Fore.YELLOW}⏰ Now outside French hours. Stopping bot...")
-          print(f"{Fore.WHITE}Sessions completed: {session_num - 1}/{daily_sessions}")
-          break
+        for session_num in range(1, daily_sessions + 1):
+            # Check if we should stop due to hours (only if overridden)
+            if not override_hours and not self._is_french_hours():
+                print(f"{Fore.RED}⏰ French hours ended. Stopping bot.")
+                break
 
-        # Random browser selection
-        browser_type = random.choice(browser_types)
+            # Reintroduce browser_weights for random browser selection
+            browser_type = random.choices(
+                [BrowserType.CHROME, BrowserType.FIREFOX, BrowserType.EDGE],
+                weights=[self.config['browser_weights']['chromium'], self.config['browser_weights']['firefox'], self.config['browser_weights']['edge']]
+            )[0]
 
-        # Run session
-        result = await self._run_single_session(session_num, daily_sessions, browser_type)
-        self.session_results.append(result)
+            # Run session
+            result = await self._run_single_session(session_num, daily_sessions, browser_type)
+            self.session_results.append(result)
 
-        # Save result immediately to file
-        self._save_session_result(result)
+            # Save result immediately to file
+            self._save_session_result(result)
 
-        # Periodic resource logging and cleanup
-        if session_num % 25 == 0:
-          self._log_resource_usage(session_num)
-          gc.collect()
-          print(f"[GC] Garbage collection forced after {session_num} sessions.")
-          await asyncio.sleep(random.uniform(2, 5))
+            # Periodic resource logging and cleanup
+            if session_num % 25 == 0:
+              self._log_resource_usage(session_num)
+              gc.collect()
+              print(f"[GC] Garbage collection forced after {session_num} sessions.")
+              await asyncio.sleep(random.uniform(2, 5))
 
-        # Periodic Playwright restart (every 50 sessions)
-        if session_num % 50 == 0:
-          await self._restart_playwright()
-          await asyncio.sleep(random.uniform(2, 5))
+            # Periodic Playwright restart (every 50 sessions)
+            if session_num % 50 == 0:
+              await self._restart_playwright()
+              await asyncio.sleep(random.uniform(2, 5))
 
-        # Generate report every configured frequency
-        report_freq = self.config['bot_settings']['report_frequency']
-        if len(self.session_results) % report_freq == 0:
-          start_session = len(self.session_results) - report_freq + 1
-          report_sessions = self.session_results[-report_freq:]
-          print(
-            f"\n{Fore.CYAN}📊 Generating report for sessions {start_session}-{len(self.session_results)}...")
-          success = self._generate_pdf_report(report_sessions, start_session)
-          if not success:
-            print(f"{Fore.RED}❌ Report generation failed")
+            # Generate report every configured frequency
+            report_freq = self.config['bot_settings']['report_frequency']
+            if len(self.session_results) % report_freq == 0:
+              start_session = len(self.session_results) - report_freq + 1
+              report_sessions = self.session_results[-report_freq:]
+              print(
+                f"\n{Fore.CYAN}📊 Generating report for sessions {start_session}-{len(self.session_results)}...")
+              success = self._generate_pdf_report(report_sessions, start_session)
+              if not success:
+                print(f"{Fore.RED}❌ Report generation failed")
 
-        # Random delay between sessions
-        delay = random.uniform(10, 60)  # 10-60 seconds
-        if session_num < daily_sessions:
-          print(f"{Fore.YELLOW}⏱️  Waiting {delay:.1f}s before next session...")
-          await asyncio.sleep(delay)
-        # Always force garbage collection after each session
-        gc.collect()
+            # Random delay between sessions
+            delay = random.uniform(10, 60)  # 10-60 seconds
+            if session_num < daily_sessions:
+              print(f"{Fore.YELLOW}⏱️  Waiting {delay:.1f}s before next session...")
+              await asyncio.sleep(delay)
+            # Always force garbage collection after each session
+            gc.collect()
     except KeyboardInterrupt:
       print(f"\n{Fore.YELLOW}Bot stopped by user")
     except Exception as e:
@@ -1345,6 +1182,101 @@ class WebAutomationBot:
       print(
         f"{Fore.YELLOW}Success Rate: {(successful/total*100):.1f}%" if total > 0 else "")
       print(f"{Fore.CYAN}{'='*50}")
+
+  def _generate_pdf_report(self, report_sessions, start_session):
+    """Generate a PDF report for the given sessions, with session details in tabular format."""
+    try:
+      from reportlab.lib.pagesizes import A4
+      from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+      from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+      from reportlab.lib import colors
+
+      # Prepare report filename
+      end_session = start_session + len(report_sessions) - 1
+      report_name = f"report_{self.run_timestamp}_sessions_{start_session}_to_{end_session}.pdf"
+      report_path = os.path.join(self.reports_dir, report_name)
+
+      doc = SimpleDocTemplate(report_path, pagesize=A4)
+      styles = getSampleStyleSheet()
+      elements = []
+
+      # Title
+      title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        spaceAfter=30,
+        alignment=1  # Center
+      )
+      elements.append(Paragraph("Web Automation Bot Report", title_style))
+      elements.append(Spacer(1, 12))
+
+      # Summary
+      total = len(report_sessions)
+      success = sum(1 for s in report_sessions if s.success)
+      fail = total - success
+      summary_data = [
+        ['Report Period', f"Sessions {start_session} - {end_session}"],
+        ['Total Sessions', str(total)],
+        ['Successful', str(success)],
+        ['Failed', str(fail)],
+        ['Success Rate', f"{(success/total*100):.1f}%" if total > 0 else "0%"],
+        ['Generated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+      ]
+      summary_table = Table(summary_data, colWidths=[2 * inch, 3 * inch])
+      summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.lightgrey),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+      ]))
+      elements.append(summary_table)
+      elements.append(Spacer(1, 20))
+
+      # Session details as 2-column tables
+      elements.append(Paragraph("Session Details", styles['Heading2']))
+      elements.append(Spacer(1, 12))
+      for session in report_sessions:
+        elements.append(Paragraph(f"Session {session.session_number}", styles['Heading3']))
+        session_data = [
+          ["Browser", session.browser],
+          ["IP Address", session.ip_address],
+          ["IP Location", session.ip_location],
+          ["Web Route", session.web_route],
+          ["Search Engine", session.search_engine.title() if session.search_engine else "N/A (Direct)"],
+          ["URL/Keywords", session.url_or_keywords],
+          ["Target URL Reached", session.target_url_reached or "N/A"],
+          ["Other URLs Visited", ", ".join(session.other_urls_visited) if session.other_urls_visited else "None"],
+          ["Time on Target URL", f"{session.time_on_target_url:.1f} seconds"],
+          ["Clicks", str(session.clicks)],
+          ["Status", "✓ Success" if session.success else f"✗ Failed: {session.failure_reason}"],
+          ["Timestamp", session.timestamp.strftime('%Y-%m-%d %H:%M:%S')],
+        ]
+        session_table = Table(session_data, colWidths=[1.7*inch, 4.8*inch])
+        session_table.setStyle(TableStyle([
+          ('BACKGROUND', (0, 0), (1, 0), colors.darkblue),
+          ('TEXTCOLOR', (0, 0), (1, 0), colors.white),
+          ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+          ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+          ('FONTSIZE', (0, 0), (-1, -1), 9),
+          ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+          ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+          ('BACKGROUND', (0, 1), (-1, -1), colors.beige if session.success else colors.lightpink)
+        ]))
+        elements.append(session_table)
+        elements.append(Spacer(1, 10))
+
+      doc.build(elements)
+      self.logger.info(f"[Report] PDF report generated: {report_path}")
+      print(f"{Fore.GREEN}PDF report generated: {report_path}")
+      return True
+    except Exception as e:
+      self.logger.error(f"Failed to generate PDF report: {e}")
+      print(f"{Fore.RED}Failed to generate PDF report: {e}")
+      return False
 
 
 if __name__ == "__main__":

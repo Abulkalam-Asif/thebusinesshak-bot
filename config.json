@@ -6,10 +6,11 @@
     "french_hours_end": 22,
     "session_duration_min": 25,
     "session_duration_max": 90,
+    "session_timeout": 300,
     "max_clicks_per_session": 4,
     "delay_between_sessions_min": 10,
     "delay_between_sessions_max": 60,
-    "report_frequency": 50
+    "report_frequency": 5
   },    "target_sites": {
         "https://www.thebusinesshack.com/hire-a-pro-france": [
             "Find a Pro, thebusinesshack.com/hire-a-pro-france",
@@ -172,8 +173,8 @@
     "edge": 25
   },
   "visit_mode_weights": {
-    "direct": 60,
-    "search": 40
+    "direct": 50,
+    "search": 50
   },
   "anti_detection": {
     "viewports": [
