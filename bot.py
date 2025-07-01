@@ -498,10 +498,12 @@ class WebAutomationBot:
         search_domain = search_domain.replace('www.', '')
 
         # Create search query: "keyword domain.com"
+        # Ensure proper encoding of keywords (handle French characters)
         search_query = f"{keyword} {search_domain}"
-
-        # Ensure proper encoding of keywords
-        search_query = search_query.encode('utf-8').decode('utf-8')
+        if isinstance(search_query, bytes):
+            search_query = search_query.decode('utf-8')
+        else:
+            search_query = str(search_query)
 
         # Randomly select search engine
         search_engines = ['duckduckgo', 'bing', 'yahoo']
@@ -509,6 +511,7 @@ class WebAutomationBot:
 
         if self.debug_mode:
             print(f"🔍 Using {selected_engine.title()} search engine")
+            print(f"🔍 Search query: {search_query}")
 
         if selected_engine == 'duckduckgo':
             actual_url = await self._search_duckduckgo(page, search_query, search_domain)
@@ -518,6 +521,12 @@ class WebAutomationBot:
             actual_url = await self._search_yahoo(page, search_query, search_domain)
 
         return search_query, actual_url, selected_engine
+
+  async def _type_unicode(self, element, text):
+    """Type unicode text into an input element, character by character, to ensure correct encoding."""
+    for char in text:
+      await element.type(char)
+      await asyncio.sleep(random.uniform(0.05, 0.15))
 
   async def _search_duckduckgo(self, page: Page, search_query: str, search_domain: str) -> str:
     """Search using DuckDuckGo"""
@@ -535,7 +544,7 @@ class WebAutomationBot:
 
     # DuckDuckGo search box
     search_box = await page.wait_for_selector('input[name="q"], #search_form_input', timeout=10000)
-    await search_box.type(search_query, delay=random.randint(50, 150))
+    await self._type_unicode(search_box, search_query)
     await asyncio.sleep(random.uniform(0.5, 1.5))
     await page.keyboard.press('Enter')
 
@@ -561,7 +570,7 @@ class WebAutomationBot:
 
     # Bing search box
     search_box = await page.wait_for_selector('input[name="q"], #sb_form_q', timeout=10000)
-    await search_box.type(search_query, delay=random.randint(50, 150))
+    await self._type_unicode(search_box, search_query)
     await asyncio.sleep(random.uniform(0.5, 1.5))
     await page.keyboard.press('Enter')
 
@@ -587,7 +596,7 @@ class WebAutomationBot:
 
     # Yahoo search box
     search_box = await page.wait_for_selector('input[name="p"], #yschsp', timeout=10000)
-    await search_box.type(search_query, delay=random.randint(50, 150))
+    await self._type_unicode(search_box, search_query)
     await asyncio.sleep(random.uniform(0.5, 1.5))
     await page.keyboard.press('Enter')
 
