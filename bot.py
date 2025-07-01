@@ -574,9 +574,17 @@ class WebAutomationBot:
     await asyncio.sleep(random.uniform(0.5, 1.5))
     await page.keyboard.press('Enter')
 
-    # Wait for results
-    await page.wait_for_load_state('domcontentloaded')
-    await asyncio.sleep(random.uniform(3, 5))
+    # Wait for Bing search results to appear (not just DOM loaded)
+    try:
+      # Wait for either the results container or at least one result item
+      await page.wait_for_selector('#b_results, li.b_algo', timeout=15000)
+      if self.debug_mode:
+        print("  ✅ Bing results container loaded.")
+    except Exception as e:
+      if self.debug_mode:
+        print(f"  ⚠️ Bing results did not appear in time: {e}")
+      # Still try to proceed, but likely to fail
+      await asyncio.sleep(2)
 
     return await self._find_and_click_target_link(page, search_domain, 'bing.com', 'Bing', search_query)
 
