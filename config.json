@@ -173,8 +173,8 @@
     "edge": 25
   },
   "visit_mode_weights": {
-    "direct": 0,
-    "search": 100
+    "direct": 50,
+    "search": 50
   },
   "anti_detection": {
     "viewports": [

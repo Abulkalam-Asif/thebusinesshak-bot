@@ -128,7 +128,7 @@ class WebAutomationBot:
   def _load_config(self):
     """Load configuration from config.json"""
     try:
-      with open('config.json', 'r') as f:
+      with open('config.json', 'r', encoding='utf-8') as f:
         return json.load(f)
     except FileNotFoundError:
       # Default configuration
@@ -931,7 +931,7 @@ class WebAutomationBot:
       # Load existing results or create new list
       if self.results_file.exists():
         try:
-          with open(self.results_file, 'r') as f:
+          with open(self.results_file, 'r', encoding='utf-8') as f:
             all_results = json.load(f)
         except (json.JSONDecodeError, Exception):
           all_results = []
@@ -942,8 +942,8 @@ class WebAutomationBot:
       all_results.append(result_dict)
 
       # Save back to file
-      with open(self.results_file, 'w') as f:
-        json.dump(all_results, f, indent=2)
+      with open(self.results_file, 'w', encoding='utf-8') as f:
+        json.dump(all_results, f, indent=2, ensure_ascii=False)
 
       # Also update summary stats
       successful = sum(1 for r in all_results if r['success'])
@@ -960,8 +960,8 @@ class WebAutomationBot:
       }
 
       # Save summary file
-      with open(self.summary_file, 'w') as f:
-        json.dump(summary, f, indent=2)
+      with open(self.summary_file, 'w', encoding='utf-8') as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
 
       print(f"{Fore.CYAN}📄 Results saved to {self.results_file}")
       print(
@@ -981,7 +981,7 @@ class WebAutomationBot:
           latest_results_file = max(
             result_files, key=lambda x: x.stat().st_mtime)
 
-          with open(latest_results_file, 'r') as f:
+          with open(latest_results_file, 'r', encoding='utf-8') as f:
             existing_data = json.load(f)
 
           # Update old format data to include new fields
@@ -1009,8 +1009,8 @@ class WebAutomationBot:
               if response in ['Y', 'YES']:
                 print(f"{Fore.GREEN}📈 Continuing from previous session...")
                 # Copy updated data to current run's file
-                with open(self.results_file, 'w') as f:
-                  json.dump(updated_data, f, indent=2, default=str)
+                with open(self.results_file, 'w', encoding='utf-8') as f:
+                  json.dump(updated_data, f, indent=2, default=str, ensure_ascii=False)
                 # Create updated summary
                 summary = {
                     "last_updated": datetime.now().isoformat(),
@@ -1020,8 +1020,8 @@ class WebAutomationBot:
                     "success_rate_percent": round((successful / total * 100), 1),
                     "continued_from": latest_results_file.name
                 }
-                with open(self.summary_file, 'w') as f:
-                  json.dump(summary, f, indent=2)
+                with open(self.summary_file, 'w', encoding='utf-8') as f:
+                  json.dump(summary, f, indent=2, ensure_ascii=False)
                 break
               elif response in ['N', 'NO']:
                 print(f"{Fore.YELLOW}Starting a new session. Previous results will not be loaded.")
@@ -1258,19 +1258,20 @@ class WebAutomationBot:
       elements.append(Spacer(1, 12))
       for session in report_sessions:
         elements.append(Paragraph(f"Session {session.session_number}", styles['Heading3']))
+        # Use Paragraph for all text fields to ensure Unicode
         session_data = [
-          ["Browser", session.browser],
-          ["IP Address", session.ip_address],
-          ["IP Location", session.ip_location],
-          ["Web Route", session.web_route],
-          ["Search Engine", session.search_engine.title() if session.search_engine else "N/A (Direct)"],
-          ["URL/Keywords", session.url_or_keywords],
-          ["Target URL Reached", session.target_url_reached or "N/A"],
-          ["Other URLs Visited", ", ".join(session.other_urls_visited) if session.other_urls_visited else "None"],
-          ["Time on Target URL", f"{session.time_on_target_url:.1f} seconds"],
-          ["Clicks", str(session.clicks)],
-          ["Status", "✓ Success" if session.success else f"✗ Failed: {session.failure_reason}"],
-          ["Timestamp", session.timestamp.strftime('%Y-%m-%d %H:%M:%S')],
+          ["Browser", Paragraph(str(session.browser), styles['Normal'])],
+          ["IP Address", Paragraph(str(session.ip_address), styles['Normal'])],
+          ["IP Location", Paragraph(str(session.ip_location), styles['Normal'])],
+          ["Web Route", Paragraph(str(session.web_route), styles['Normal'])],
+          ["Search Engine", Paragraph(str(session.search_engine.title()) if session.search_engine else "N/A (Direct)", styles['Normal'])],
+          ["URL/Keywords", Paragraph(str(session.url_or_keywords), styles['Normal'])],
+          ["Target URL Reached", Paragraph(str(session.target_url_reached) if session.target_url_reached else "N/A", styles['Normal'])],
+          ["Other URLs Visited", Paragraph(", ".join(map(str, session.other_urls_visited)) if session.other_urls_visited else "None", styles['Normal'])],
+          ["Time on Target URL", Paragraph(f"{session.time_on_target_url:.1f} seconds", styles['Normal'])],
+          ["Clicks", Paragraph(str(session.clicks), styles['Normal'])],
+          ["Status", Paragraph("✓ Success" if session.success else f"✗ Failed: {session.failure_reason}", styles['Normal'])],
+          ["Timestamp", Paragraph(session.timestamp.strftime('%Y-%m-%d %H:%M:%S'), styles['Normal'])],
         ]
         session_table = Table(session_data, colWidths=[1.7*inch, 4.8*inch])
         session_table.setStyle(TableStyle([
