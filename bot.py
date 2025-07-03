@@ -906,6 +906,58 @@ class WebAutomationBot:
         else:
             await asyncio.sleep(random.uniform(5, 15))
 
+  def _display_session_results(self, result: SessionResult):
+    """Display session results in a well-organized format in the terminal"""
+    print(f"\n{Fore.CYAN}{'='*80}")
+    print(f"{Fore.YELLOW}📊 SESSION RESULTS")
+    print(f"{Fore.CYAN}{'='*80}")
+    
+    # Status color coding
+    status_color = Fore.GREEN if result.success else Fore.RED
+    status_icon = "✅" if result.success else "❌"
+    status_text = "SUCCESS" if result.success else "FAILED"
+    
+    print(f"{Fore.WHITE}📋 Session Number:     {Fore.CYAN}{result.session_number:03d}/{result.total_sessions}")
+    print(f"{Fore.WHITE}🌐 Browser:           {Fore.CYAN}{result.browser.title()}")
+    print(f"{Fore.WHITE}🔗 IP Address:        {Fore.CYAN}{result.ip_address}")
+    print(f"{Fore.WHITE}📍 IP Location:       {Fore.CYAN}{result.ip_location}")
+    print(f"{Fore.WHITE}🛣️  Web Route:         {Fore.CYAN}{result.web_route.title()}")
+    
+    if result.search_engine:
+        print(f"{Fore.WHITE}🔍 Search Engine:     {Fore.CYAN}{result.search_engine.title()}")
+    
+    print(f"{Fore.WHITE}🎯 URL/Keywords:      {Fore.CYAN}{result.url_or_keywords}")
+    
+    if result.target_url_reached:
+        print(f"{Fore.WHITE}🎯 Target URL:        {Fore.CYAN}{result.target_url_reached}")
+    else:
+        print(f"{Fore.WHITE}🎯 Target URL:        {Fore.YELLOW}Not Reached")
+    
+    if result.other_urls_visited:
+        print(f"{Fore.WHITE}🔗 Other URLs:        {Fore.CYAN}{', '.join(result.other_urls_visited)}")
+    else:
+        print(f"{Fore.WHITE}🔗 Other URLs:        {Fore.YELLOW}None")
+    
+    print(f"{Fore.WHITE}⏱️  Time on Target:    {Fore.CYAN}{result.time_on_target_url:.1f} seconds")
+    print(f"{Fore.WHITE}🖱️  Clicks:            {Fore.CYAN}{result.clicks}")
+    print(f"{Fore.WHITE}📅 Timestamp:         {Fore.CYAN}{result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Status with color coding
+    print(f"{Fore.WHITE}📊 Status:            {status_color}{status_icon} {status_text}")
+    
+    if not result.success and result.failure_reason:
+        print(f"{Fore.WHITE}❌ Failure Reason:    {Fore.RED}{result.failure_reason}")
+    
+    print(f"{Fore.CYAN}{'='*80}")
+    
+    # Quick summary stats
+    total_sessions = len(self.session_results)
+    successful_sessions = sum(1 for r in self.session_results if r.success)
+    success_rate = (successful_sessions / total_sessions * 100) if total_sessions > 0 else 0
+    
+    print(f"{Fore.WHITE}📈 Running Total: {Fore.CYAN}{total_sessions} sessions | {Fore.GREEN}{successful_sessions} successful | {Fore.RED}{total_sessions - successful_sessions} failed | {Fore.YELLOW}{success_rate:.1f}% success rate")
+    print(f"{Fore.CYAN}{'='*80}")
+
   def _save_session_result(self, result: SessionResult):
     """Save session result to JSON file immediately after completion"""
     try:
@@ -1130,6 +1182,9 @@ class WebAutomationBot:
             # Run session
             result = await self._run_single_session(session_num, daily_sessions, browser_type)
             self.session_results.append(result)
+
+            # Display session results in terminal
+            self._display_session_results(result)
 
             # Save result immediately to file
             self._save_session_result(result)
