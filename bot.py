@@ -32,6 +32,8 @@ class BrowserType(Enum):
   CHROME = "chrome"
   FIREFOX = "firefox"
   EDGE = "edge"
+  WEBKIT = "webkit"  # Playwright's Safari/WebKit engine
+  BRAVE = "brave"    # Chromium-based, custom executable
 
 
 class VisitMode(Enum):
@@ -1122,7 +1124,20 @@ class WebAutomationBot:
             proxy=proxy_config,
             channel="msedge"
         )
-    else:  # Chrome
+    elif browser_type == BrowserType.BRAVE:
+        # For Brave, use the Chromium launcher with Brave's binary path (Windows default)
+        brave_path = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+        return await playwright.chromium.launch(
+            headless=not self.debug_mode,
+            proxy=proxy_config,
+            executable_path=brave_path
+        )
+    elif browser_type == BrowserType.WEBKIT:
+        return await playwright.webkit.launch(
+            headless=not self.debug_mode,
+            proxy=proxy_config
+        )
+    else:  # Chrome (default)
         return await playwright.chromium.launch(
             headless=not self.debug_mode,
             proxy=proxy_config
@@ -1164,7 +1179,7 @@ class WebAutomationBot:
     daily_sessions = self._get_daily_session_count()
     print(f"{Fore.GREEN}Daily target: {daily_sessions} sessions")
 
-    browser_types = [BrowserType.CHROME, BrowserType.FIREFOX, BrowserType.EDGE]
+    browser_types = [BrowserType.CHROME, BrowserType.FIREFOX, BrowserType.EDGE, BrowserType.WEBKIT, BrowserType.BRAVE]
 
     try:
         for session_num in range(1, daily_sessions + 1):
@@ -1175,8 +1190,14 @@ class WebAutomationBot:
 
             # Reintroduce browser_weights for random browser selection
             browser_type = random.choices(
-                [BrowserType.CHROME, BrowserType.FIREFOX, BrowserType.EDGE],
-                weights=[self.config['browser_weights']['chromium'], self.config['browser_weights']['firefox'], self.config['browser_weights']['edge']]
+                browser_types,
+                weights=[
+                    self.config['browser_weights']['chromium'],
+                    self.config['browser_weights']['firefox'],
+                    self.config['browser_weights']['edge'],
+                    self.config['browser_weights']['webkit'],
+                    self.config['browser_weights']['brave']
+                ]
             )[0]
 
             # Run session

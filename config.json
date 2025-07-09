@@ -168,9 +168,11 @@
         ]
     },
   "browser_weights": {
-    "chromium": 40,
-    "firefox": 35,
-    "edge": 25
+    "chromium": 20,
+    "firefox": 20,
+    "edge": 20,
+    "webkit": 20,
+    "brave": 20
   },
   "visit_mode_weights": {
     "direct": 50,
